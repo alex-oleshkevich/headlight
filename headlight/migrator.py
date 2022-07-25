@@ -8,7 +8,6 @@ import glob
 import os
 import time
 import typing
-from re import A
 
 from headlight.database import create_database
 from headlight.drivers.base import AppliedMigration, DbDriver, DummyTransaction
@@ -94,13 +93,13 @@ class MigrationStatus:
 
 
 class MigrateHooks:
-    def before_migrate(self, migration: Migration):
+    def before_migrate(self, migration: Migration) -> None:
         ...
 
-    def after_migrate(self, migration: Migration, time_taken: float):
+    def after_migrate(self, migration: Migration, time_taken: float) -> None:
         ...
 
-    def on_error(self, migration: Migration, exc: Exception, time_taken: float):
+    def on_error(self, migration: Migration, exc: Exception, time_taken: float) -> None:
         ...
 
 
@@ -153,7 +152,7 @@ class Migrator:
         upgrade: bool = True,
         hooks: MigrateHooks | None = None,
     ) -> None:
-        tx = self.db.transaction() if migration.transactional else DummyTransaction()
+        tx = self.db.transaction() if migration.transactional else DummyTransaction(self.db)
         start_time = time.time()
         hooks = hooks or MigrateHooks()
         try:

@@ -32,8 +32,8 @@ psycopg2-binary = {version="^2.9.3", optional=true}
 pytest = "^7.1.0"
 pytest-asyncio = "^0.18.0"
 pytest-cov = "^3.0"
-black = "^22.1.0"
-mypy = "^0.941"
+black = "^22.6.0"
+mypy = "^0.971"
 flake8 = "^4.0.1"
 
 [tool.poetry.extras]

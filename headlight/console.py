@@ -13,7 +13,7 @@ migration_name_help = 'The name of the migration.'
 
 
 class LoggingHooks(MigrateHooks):
-    def before_migrate(self, migration: Migration):
+    def before_migrate(self, migration: Migration) -> None:
         click.secho(
             '{status} {filename}'.format(
                 status=click.style('Migrating'.ljust(10, ' '), fg='yellow'),
@@ -22,7 +22,7 @@ class LoggingHooks(MigrateHooks):
             nl=False,
         )
 
-    def after_migrate(self, migration: Migration, time_taken: float):
+    def after_migrate(self, migration: Migration, time_taken: float) -> None:
         click.secho(
             '\r{status} {filename} {time}'.format(
                 status=click.style('Done'.ljust(10, ' '), fg='green'),
@@ -31,7 +31,7 @@ class LoggingHooks(MigrateHooks):
             )
         )
 
-    def on_error(self, migration: Migration, exc: Exception, time_taken: float):
+    def on_error(self, migration: Migration, exc: Exception, time_taken: float) -> None:
         click.secho(
             '\r{status} {filename}'.format(
                 status=click.style('Fail'.ljust(10, ' '), fg='red'),
@@ -146,7 +146,7 @@ def status(
         click.secho(
             '{status} {filename}'.format(
                 status=(
-                    click.style(f'Applied', fg='green') if migration.applied else click.style('Pending', fg='yellow')
+                    click.style('Applied', fg='green') if migration.applied else click.style('Pending', fg='yellow')
                 ),
                 filename=os.path.basename(migration.filename),
             )

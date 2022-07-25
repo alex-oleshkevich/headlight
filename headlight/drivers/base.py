@@ -5,33 +5,33 @@ import types
 import typing
 from datetime import datetime
 
-T = typing.TypeVar('T')
+T = typing.TypeVar('T', bound='DbDriver')
 
 
 class AppliedMigration(typing.TypedDict):
     name: str
     revision: str
-    applied: str
+    applied: datetime
 
 
 class DbDriver(abc.ABC):
+    table_template = ''
     placeholder_mark = '?'
 
-    @abc.abstractclassmethod
-    def from_url(cls: typing.Type[T]) -> T:
+    @classmethod
+    def from_url(cls: typing.Type[T], url: str) -> T:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def fetch_all(self, stmt: str) -> typing.Iterable[dict]:
         ...
 
-    def fetch_all(self, stmt: str) -> typing.Iterable[dict]:
-        cursor = self.conn.cursor()
-        cursor.execute(stmt)
-        for row in cursor.fetchall():
-            yield row
-
+    @abc.abstractmethod
     def execute(self, stmt: str, params: list[str] | None = None) -> None:
-        cursor = self.conn.cursor()
-        cursor.execute(stmt, params or [])
+        ...
 
     def create_migrations_table(self, table: str) -> None:
+        assert self.table_template
         self.execute(self.table_template.format(table=table))
 
     def transaction(self) -> Transaction:
@@ -39,14 +39,15 @@ class DbDriver(abc.ABC):
 
     def add_applied_migration(self, table: str, revision: str, name: str) -> None:
         self.execute(
-            f'INSERT INTO {table} (revision, name, applied) VALUES ({self.placeholder_mark}, {self.placeholder_mark}, {self.placeholder_mark})',
+            f'INSERT INTO {table} (revision, name, applied) '
+            f'VALUES ({self.placeholder_mark}, {self.placeholder_mark}, {self.placeholder_mark})',
             [revision, name, datetime.now().isoformat()],
         )
 
     def remove_applied_migration(self, table: str, revision: str) -> None:
         self.execute(f'DELETE FROM {table} WHERE revision = {self.placeholder_mark}', [revision])
 
-    def get_applied_migrations(self, table: str, limit: int | None = None) -> typing.Iterable[dict]:
+    def get_applied_migrations(self, table: str, limit: int | None = None) -> typing.Iterable[AppliedMigration]:
         stmt = f'SELECT revision, name, applied FROM {table} ORDER BY applied DESC'
         if limit:
             stmt += f' LIMIT {limit}'
