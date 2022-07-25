@@ -19,6 +19,7 @@ class DbDriver(abc.ABC):
     placeholder_mark = '?'
 
     @classmethod
+    @abc.abstractclassmethod
     def from_url(cls: typing.Type[T], url: str) -> T:
         raise NotImplementedError()
 
