@@ -6,6 +6,7 @@ import datetime
 import getpass
 import glob
 import os
+from re import A
 import time
 import typing
 
@@ -109,27 +110,42 @@ class Migrator:
 
     def get_migrations(self) -> list[Migration]:
         sql_files = glob.glob(f'{self.directory}/*.sql')
-        return [Migration.from_sql_file(sql_file) for sql_file in sql_files]
+        return [Migration.from_sql_file(sql_file) for sql_file in sorted(sql_files)]
 
-    def get_applied_migrations(self) -> dict[str, AppliedMigration]:
-        return {am['revision']: am for am in self.db.get_applied_migrations(self.table)}
+    def get_applied_migrations(self, limit: int | None = None) -> dict[str, AppliedMigration]:
+        return {am['revision']: am for am in self.db.get_applied_migrations(self.table, limit)}
 
     def get_pending_migrations(self) -> list[Migration]:
         applied = self.get_applied_migrations()
         return [migration for migration in self.get_migrations() if migration.revision not in applied]
 
-    def upgrade(self, *, steps: int | None = None, dry_run: bool = False, hooks: MigrateHooks | None = None) -> None:
+    def upgrade(self, *, dry_run: bool = False, fake: bool = False, hooks: MigrateHooks | None = None) -> None:
         pending = self.get_pending_migrations()
-        steps = steps or len(pending)
-        pending = pending[:steps]
 
         for migration in pending:
-            self.apply_migration(migration, dry_run, hooks=hooks)
+            self.apply_migration(migration, dry_run=dry_run, fake=fake, hooks=hooks)
+
+    def downgrade(
+        self,
+        *,
+        steps: int,
+        fake: bool = False,
+        dry_run: bool = False,
+        hooks: MigrateHooks | None = None,
+    ) -> None:
+        applied = self.get_applied_migrations(steps)
+        pending = [migration for migration in self.get_migrations() if migration.revision in applied]
+
+        for migration in pending:
+            self.apply_migration(migration, dry_run=dry_run, fake=fake, hooks=hooks, upgrade=False)
 
     def apply_migration(
         self,
         migration: Migration,
+        *,
+        fake: bool,
         dry_run: bool,
+        upgrade: bool = True,
         hooks: MigrateHooks | None = None,
     ) -> None:
         tx = self.db.transaction() if migration.transactional else DummyTransaction()
@@ -139,11 +155,17 @@ class Migrator:
             with tx:
                 hooks.before_migrate(migration)
                 if not dry_run:
-                    migration.upgrade_callback(self.db)
-                    self.db.add_applied_migration(self.table, migration.revision, migration.name)
+                    if not fake:
+                        if upgrade:
+                            migration.upgrade_callback(self.db)
+                            self.db.add_applied_migration(self.table, migration.revision, migration.name)
+                        else:
+                            migration.downgrade_callback(self.db)
+                            self.db.remove_applied_migration(self.table, migration.revision)
                 time_taken = time.time() - start_time
                 hooks.after_migrate(migration, time_taken)
         except Exception as ex:
+            time_taken = time.time() - start_time
             hooks.on_error(migration, ex, time_taken)
             raise
 
@@ -162,7 +184,7 @@ def create_sql_migration(directory: str, name: str) -> str:
     base_dir = os.path.abspath(directory)
     os.makedirs(base_dir, exist_ok=True)
 
-    name = name or 'auto'
+    name = name or 'unnamed'
     now = datetime.datetime.now()
     revision = now.strftime('%Y%m%d_%H%M%S')
     filename = f'{revision}_{name.replace(" ", "_").lower()}.sql'

@@ -40,8 +40,13 @@ class DbDriver(abc.ABC):
             [revision, name, datetime.now().isoformat()],
         )
 
-    def get_applied_migrations(self, table: str) -> typing.Iterable[dict]:
-        stmt = f'SELECT revision, name, applied FROM {table}'
+    def remove_applied_migration(self, table: str, revision: str) -> None:
+        self.execute(f'DELETE FROM {table} WHERE revision = ?', [revision])
+
+    def get_applied_migrations(self, table: str, limit: int | None = None) -> typing.Iterable[dict]:
+        stmt = f'SELECT revision, name, applied FROM {table} ORDER BY applied DESC'
+        if limit:
+            stmt += f' LIMIT {limit}'
         for row in self.fetch_all(stmt):
             yield {
                 'revision': row[0],

@@ -6,3 +6,4 @@ __pycache__
 .idea
 dist/
 database.sqlite3
+migrations

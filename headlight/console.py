@@ -7,7 +7,7 @@ database_help = 'Database connection URL.'
 migrations_help = 'Migrations directory.'
 dry_run_help = 'Simulate migration execution (nothing will be applied to the database).'
 table_help = 'History table name.'
-steps_help = 'Amount of migrations to apply during this iteration.'
+revert_steps_help = 'The number of migrations to be reverted.'
 fake_help = 'Write history table records without running any SQL command.'
 migration_name_help = 'The name of the migration.'
 
@@ -57,7 +57,6 @@ def app() -> None:
 )
 @click.option('--dry-run', is_flag=True, default=False, show_default=True, help=dry_run_help)
 @click.option('--table', default='migrations', show_default=True, help=table_help)
-@click.option('--steps', type=int, help=steps_help)
 @click.option('--fake', is_flag=True, default=False, help=fake_help)
 def upgrade(
     *,
@@ -66,11 +65,41 @@ def upgrade(
     table: str,
     fake: bool,
     dry_run: bool,
-    steps: int | None,
 ) -> None:
     migrator = Migrator(database, migrations, table)
     migrator.initialize_db()
-    migrator.upgrade(steps=steps, dry_run=dry_run, hooks=LoggingHooks())
+    migrator.upgrade(fake=fake, dry_run=dry_run, hooks=LoggingHooks())
+
+
+@app.command()
+@click.option('-d', '--database', help=database_help)
+@click.option(
+    '-m',
+    '--migrations',
+    default='migrations',
+    type=click.Path(file_okay=False, dir_okay=True),
+    show_default=True,
+    help=migrations_help,
+)
+@click.option('--dry-run', is_flag=True, default=False, show_default=True, help=dry_run_help)
+@click.option('--table', default='migrations', show_default=True, help=table_help)
+@click.option('--fake', is_flag=True, default=False, help=fake_help)
+@click.option('--steps', type=int, default=1, help=revert_steps_help, show_default=True)
+def downgrade(
+    *,
+    database: str,
+    migrations: str,
+    table: str,
+    fake: bool,
+    dry_run: bool,
+    steps: int,
+) -> None:
+    migrator = Migrator(database, migrations, table)
+    migrator.initialize_db()
+    try:
+        migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, hooks=LoggingHooks())
+    except Exception as ex:
+        click.secho(click.style(ex, fg='red'), err=True)
 
 
 @app.command
