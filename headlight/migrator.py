@@ -6,9 +6,9 @@ import datetime
 import getpass
 import glob
 import os
-from re import A
 import time
 import typing
+from re import A
 
 from headlight.database import create_database
 from headlight.drivers.base import AppliedMigration, DbDriver, DummyTransaction
@@ -58,17 +58,22 @@ class Migration:
                     parsing_state = 'downgrade'
                     continue
 
-                if parsing_state == 'upgrade':
+                if parsing_state == 'upgrade' and not line.startswith('--'):
                     upgrade_commands += line
 
-                if parsing_state == 'downgrade':
+                if parsing_state == 'downgrade' and not line.startswith('--'):
                     downgrade_commands += line
 
+        upgrade_commands = upgrade_commands.strip()
+        downgrade_commands = downgrade_commands.strip()
+
         def upgrade_callback(db: DbDriver) -> None:
-            db.execute(upgrade_commands)
+            if upgrade_commands:
+                db.execute(upgrade_commands)
 
         def downgrade_callback(db: DbDriver) -> None:
-            db.execute(downgrade_commands)
+            if downgrade_commands:
+                db.execute(downgrade_commands)
 
         return Migration(
             name=name,

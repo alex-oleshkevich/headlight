@@ -16,7 +16,7 @@ class LoggingHooks(MigrateHooks):
     def before_migrate(self, migration: Migration):
         click.secho(
             '{status} {filename}'.format(
-                status=click.style('Migrating', fg='yellow'),
+                status=click.style('Migrating'.ljust(10, ' '), fg='yellow'),
                 filename=os.path.basename(migration.file),
             ),
             nl=False,
@@ -25,7 +25,7 @@ class LoggingHooks(MigrateHooks):
     def after_migrate(self, migration: Migration, time_taken: float):
         click.secho(
             '\r{status} {filename} {time}'.format(
-                status=click.style('Done', fg='green'),
+                status=click.style('Done'.ljust(10, ' '), fg='green'),
                 time=click.style(f'({time_taken:.3f}s)', fg='cyan'),
                 filename=os.path.basename(migration.file),
             )
@@ -34,7 +34,7 @@ class LoggingHooks(MigrateHooks):
     def on_error(self, migration: Migration, exc: Exception, time_taken: float):
         click.secho(
             '\r{status} {filename}'.format(
-                status=click.style('Fail', fg='red'),
+                status=click.style('Fail'.ljust(10, ' '), fg='red'),
                 filename=os.path.basename(migration.file),
             )
         )

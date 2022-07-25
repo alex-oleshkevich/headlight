@@ -15,33 +15,36 @@ class AppliedMigration(typing.TypedDict):
 
 
 class DbDriver(abc.ABC):
+    placeholder_mark = '?'
+
     @abc.abstractclassmethod
     def from_url(cls: typing.Type[T]) -> T:
         ...
 
-    @abc.abstractmethod
-    def create_migrations_table(self, table: str) -> None:
-        ...
-
-    @abc.abstractmethod
-    def execute(self, stmt: str, params: list[str] | None = None) -> None:
-        ...
-
-    @abc.abstractmethod
     def fetch_all(self, stmt: str) -> typing.Iterable[dict]:
-        ...
+        cursor = self.conn.cursor()
+        cursor.execute(stmt)
+        for row in cursor.fetchall():
+            yield row
+
+    def execute(self, stmt: str, params: list[str] | None = None) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(stmt, params or [])
+
+    def create_migrations_table(self, table: str) -> None:
+        self.execute(self.table_template.format(table=table))
 
     def transaction(self) -> Transaction:
         return Transaction(self)
 
     def add_applied_migration(self, table: str, revision: str, name: str) -> None:
         self.execute(
-            f'INSERT INTO {table} (revision, name, applied) VALUES (?, ?, ?)',
+            f'INSERT INTO {table} (revision, name, applied) VALUES ({self.placeholder_mark}, {self.placeholder_mark}, {self.placeholder_mark})',
             [revision, name, datetime.now().isoformat()],
         )
 
     def remove_applied_migration(self, table: str, revision: str) -> None:
-        self.execute(f'DELETE FROM {table} WHERE revision = ?', [revision])
+        self.execute(f'DELETE FROM {table} WHERE revision = {self.placeholder_mark}', [revision])
 
     def get_applied_migrations(self, table: str, limit: int | None = None) -> typing.Iterable[dict]:
         stmt = f'SELECT revision, name, applied FROM {table} ORDER BY applied DESC'
