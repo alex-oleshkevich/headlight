@@ -1,7 +1,7 @@
 import click
 import os
 
-from headlight.migrator import MigrateHooks, Migration, Migrator, create_sql_migration
+from headlight.migrator import MigrateHooks, Migration, Migrator, create_migration_template
 
 database_help = 'Database connection URL.'
 migrations_help = 'Migrations directory.'
@@ -10,6 +10,8 @@ table_help = 'History table name.'
 revert_steps_help = 'The number of migrations to be reverted.'
 fake_help = 'Write history table records without running any SQL command.'
 migration_name_help = 'The name of the migration.'
+
+DATABASE_ENVVAR = 'HL_DATABASE_URL'
 
 
 class LoggingHooks(MigrateHooks):
@@ -46,12 +48,12 @@ def app() -> None:
 
 
 @app.command()
-@click.option('-d', '--database', help=database_help)
+@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR)
 @click.option(
     '-m',
     '--migrations',
     default='migrations',
-    type=click.Path(file_okay=False, dir_okay=True),
+    type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
     show_default=True,
     help=migrations_help,
 )
@@ -72,12 +74,12 @@ def upgrade(
 
 
 @app.command()
-@click.option('-d', '--database', help=database_help)
+@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR)
 @click.option(
     '-m',
     '--migrations',
     default='migrations',
-    type=click.Path(file_okay=False, dir_okay=True),
+    type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
     show_default=True,
     help=migrations_help,
 )
@@ -117,7 +119,7 @@ def new(
     migrations: str,
     name: str,
 ) -> None:
-    path = create_sql_migration(migrations, name)
+    path = create_migration_template(migrations, name)
     filename = os.path.basename(path)
     click.secho('Created migration %s.' % click.style(filename, bold=True))
 
@@ -127,22 +129,26 @@ def new(
     '-m',
     '--migrations',
     default='migrations',
-    type=click.Path(file_okay=False, dir_okay=True),
+    type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
     show_default=True,
     help=migrations_help,
 )
 @click.option('--table', default='migrations', show_default=True, help=table_help)
-@click.option('-d', '--database', help=database_help)
+@click.option('-d', '--database', help=database_help, envvar='HL_DATABASE_URL')
 def status(
     *,
     database: str,
     migrations: str,
     table: str,
 ) -> None:
+    assert database
     migrator = Migrator(database, migrations, table)
     migrator.initialize_db()
     history = migrator.status()
+    has_entries = False
+
     for migration in history:
+        has_entries = True
         click.secho(
             '{status} {filename}'.format(
                 status=(
@@ -151,6 +157,9 @@ def status(
                 filename=os.path.basename(migration.filename),
             )
         )
+
+    if not has_entries:
+        click.secho("No migration entries in history.")
 
 
 def main() -> None:

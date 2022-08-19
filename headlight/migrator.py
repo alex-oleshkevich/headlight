@@ -5,23 +5,27 @@ from dataclasses import dataclass
 import datetime
 import getpass
 import glob
+import importlib
 import os
+import sys
 import time
 import typing
 
+from headlight import Schema
 from headlight.database import create_database
 from headlight.drivers.base import AppliedMigration, DbDriver, DummyTransaction
 
 MIGRATION_TEMPLATE = """
--- Author: {author}
--- Date: {date}
--- Transactional: {transactional}
+from headlight import DbDriver, Schema
 
-{upgrade}
+date = "{date}"
+author = "{author}"
+transactional = True
 
----- Keep this separator.
 
-{downgrade}
+def migrate(schema: Schema, conn: DbDriver) -> None:
+    pass
+
 """
 
 
@@ -35,50 +39,29 @@ class Migration:
     downgrade_callback: typing.Callable[[DbDriver], None]
 
     @classmethod
-    def from_sql_file(cls, file: str) -> Migration:
-        filename = os.path.basename(file)
+    def from_py_module(cls, py_module: str) -> Migration:
+        mod = importlib.import_module(py_module)
+        filename = typing.cast(str, mod.__file__)
         revision = filename[:15]
         name, _, _ = filename[16:].rpartition('.')
-        upgrade_commands = ''
-        downgrade_commands = ''
-        transactional = True
-        parsing_state = 'header'
-
-        with open(file) as f:
-            for line in f.readlines():
-                if parsing_state == 'header':
-                    if line.startswith('-- Transactional'):
-                        transactional = 'yes' in line.lower()
-
-                if line.strip() == '' and parsing_state == 'header':
-                    parsing_state = 'upgrade'
-
-                if line.startswith('----'):
-                    parsing_state = 'downgrade'
-                    continue
-
-                if parsing_state == 'upgrade' and not line.startswith('--'):
-                    upgrade_commands += line
-
-                if parsing_state == 'downgrade' and not line.startswith('--'):
-                    downgrade_commands += line
-
-        upgrade_commands = upgrade_commands.strip()
-        downgrade_commands = downgrade_commands.strip()
 
         def upgrade_callback(db: DbDriver) -> None:
-            if upgrade_commands:
-                db.execute(upgrade_commands)
+            schema = Schema()
+            mod.migrate(schema, db)
+            commands = schema.get_upgrade_commands()
+            db.execute(';'.join(commands))
 
         def downgrade_callback(db: DbDriver) -> None:
-            if downgrade_commands:
-                db.execute(downgrade_commands)
+            schema = Schema()
+            mod.migrate(schema, db)
+            commands = schema.get_down_commands()
+            db.execute(';'.join(commands))
 
         return Migration(
             name=name,
-            file=file,
+            file=filename,
             revision=revision,
-            transactional=transactional,
+            transactional=getattr(mod, 'transactional', True),
             upgrade_callback=upgrade_callback,
             downgrade_callback=downgrade_callback,
         )
@@ -113,8 +96,12 @@ class Migrator:
         self.db.create_migrations_table(self.table)
 
     def get_migrations(self) -> list[Migration]:
-        sql_files = glob.glob(f'{self.directory}/*.sql')
-        return [Migration.from_sql_file(sql_file) for sql_file in sorted(sql_files)]
+        sys.path.insert(0, self.directory)
+        migration_files = glob.glob(f'{self.directory}/*.py')
+        return [
+            Migration.from_py_module(os.path.basename(py_module.replace('.py', '')))
+            for py_module in sorted(migration_files)
+        ]
 
     def get_applied_migrations(self, limit: int | None = None) -> dict[str, AppliedMigration]:
         return {am['revision']: am for am in self.db.get_applied_migrations(self.table, limit)}
@@ -158,14 +145,13 @@ class Migrator:
         try:
             with tx:
                 hooks.before_migrate(migration)
-                if not dry_run:
-                    if not fake:
-                        if upgrade:
-                            migration.upgrade_callback(self.db)
-                            self.db.add_applied_migration(self.table, migration.revision, migration.name)
-                        else:
-                            migration.downgrade_callback(self.db)
-                            self.db.remove_applied_migration(self.table, migration.revision)
+                if not dry_run and not fake:
+                    if upgrade:
+                        migration.upgrade_callback(self.db)
+                        self.db.add_applied_migration(self.table, migration.revision, migration.name)
+                    else:
+                        migration.downgrade_callback(self.db)
+                        self.db.remove_applied_migration(self.table, migration.revision)
                 time_taken = time.time() - start_time
                 hooks.after_migrate(migration, time_taken)
         except Exception as ex:
@@ -184,14 +170,14 @@ class Migrator:
             )
 
 
-def create_sql_migration(directory: str, name: str) -> str:
+def create_migration_template(directory: str, name: str) -> str:
     base_dir = os.path.abspath(directory)
     os.makedirs(base_dir, exist_ok=True)
 
     name = name or 'unnamed'
     now = datetime.datetime.now()
     revision = now.strftime('%Y%m%d_%H%M%S')
-    filename = f'{revision}_{name.replace(" ", "_").lower()}.sql'
+    filename = f'{revision}_{name.replace(" ", "_").lower()}.py'
     path = os.path.join(base_dir, filename)
     with open(path, 'w') as f:
         f.write(
@@ -200,9 +186,7 @@ def create_sql_migration(directory: str, name: str) -> str:
                 revision=revision,
                 author=getpass.getuser(),
                 date=now.isoformat(),
-                transactional='yes',
-                upgrade='-- REPLACE THIS LINE WITH UPGRADE COMMANDS',
-                downgrade='-- REPLACE THIS LINE WITH DOWNGRADE COMMANDS',
+                transactional='True',
             ).strip()
         )
     return path
