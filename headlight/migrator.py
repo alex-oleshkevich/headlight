@@ -154,6 +154,9 @@ class Migrator:
             with tx:
                 hooks.before_migrate(migration)
                 stmts = [(op.to_up_sql(self.db) if upgrade else op.to_down_sql(self.db)) for op in migration.ops]
+                if not upgrade:
+                    stmts = list(reversed(stmts))
+
                 sql = ';\n'.join(stmts)
                 if print_sql:
                     sys.stderr.write(f'\n-- rev. {migration.revision} from {migration.file}\n')

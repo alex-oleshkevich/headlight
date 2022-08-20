@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 
 import abc
+import typing
 
 from headlight.drivers.base import DbDriver
 from headlight.schema.types import Type
@@ -38,6 +39,35 @@ class UniqueConstraint:
         return stmt
 
 
+Action = typing.Literal['RESTRICT', 'CASCADE', 'NO ACTION', 'SET NULL', 'SET DEFAULT']
+
+
+@dataclasses.dataclass
+class ForeignKey:
+    target_table: str
+    target_columns: list[str] | None = None
+    self_columns: list[str] | None = None
+    on_delete: Action | None = None
+    on_update: Action | None = None
+    name: str | None = None
+
+    def __str__(self) -> str:
+        stmt = ''
+        if self.name:
+            stmt += f'CONSTRAINT {self.name} '
+
+        if self.self_columns:
+            stmt += 'FOREIGN KEY (%s) ' % ', '.join(self.self_columns)
+
+        stmt += 'REFERENCES {table}{columns}{on_delete}{on_update}'.format(
+            table=self.target_table,
+            columns='(%s) ' % ', '.join(self.target_columns) if self.target_columns else '',
+            on_delete=f' ON DELETE {self.on_delete}' if self.on_delete else '',
+            on_update=f' ON UPDATE {self.on_update}' if self.on_update else '',
+        )
+        return stmt
+
+
 @dataclasses.dataclass
 class Column:
     name: str
@@ -50,6 +80,7 @@ class Column:
     comment: str | None = None
     unique_constraint: UniqueConstraint | None = None
     check_constraint: CheckConstraint | None = None
+    foreign_key: ForeignKey | None = None
 
     def check(self, expr: str, name: str | None = None) -> Column:
         self.check_constraint = CheckConstraint(expr, name)
@@ -57,6 +88,21 @@ class Column:
 
     def unique(self, name: str | None = None) -> Column:
         self.unique_constraint = UniqueConstraint(name)
+        return self
+
+    def references(
+        self,
+        table: str,
+        columns: list[str] | None = None,
+        on_delete: Action | None = None,
+        on_update: Action | None = None,
+    ) -> Column:
+        self.foreign_key = ForeignKey(
+            target_table=table,
+            on_delete=on_delete,
+            on_update=on_update,
+            target_columns=columns,
+        )
         return self
 
 
@@ -94,6 +140,7 @@ class CreateTableOp(Operation):
         self.checks: list[CheckConstraint] = []
         self.extra_ops: list[Operation] = []
         self.unique: UniqueConstraint | None = None
+        self.foreign_keys: list[ForeignKey] = []
 
     def add_column(
         self,
@@ -153,6 +200,26 @@ class CreateTableOp(Operation):
     ) -> None:
         self.unique = UniqueConstraint(name=name, include=include, columns=columns)
 
+    def add_foreign_key(
+        self,
+        columns: list[str],
+        target_table: str,
+        target_columns: list[str] | None = None,
+        name: str | None = None,
+        on_delete: Action | None = None,
+        on_update: Action | None = None,
+    ) -> None:
+        self.foreign_keys.append(
+            ForeignKey(
+                name=name,
+                on_delete=on_delete,
+                on_update=on_update,
+                self_columns=columns,
+                target_table=target_table,
+                target_columns=target_columns,
+            )
+        )
+
     def to_up_sql(self, driver: DbDriver) -> str:
         pk_cols = [col for col in self.columns if col.primary_key]
         pk_count = len(pk_cols)
@@ -167,6 +234,7 @@ class CreateTableOp(Operation):
                 type=driver.get_sql_for_type(column.type),
                 default=f" DEFAULT '{column.default}'" if column.default is not None else '',
                 primary_key=' PRIMARY KEY' if pk_count == 1 and column.primary_key else '',
+                foreign=f' {column.foreign_key}' if column.foreign_key else '',
             )
             for column in self.columns
         ]
@@ -176,10 +244,14 @@ class CreateTableOp(Operation):
 
         if self.checks:
             for check in self.checks:
-                column_stmts.append('    ' + str(check))
+                column_stmts.append(f'    {check}')
 
         if self.unique:
             column_stmts.append(f'    {self.unique}')
+
+        if self.foreign_keys:
+            for fk in self.foreign_keys:
+                column_stmts.append(f'    {fk}')
 
         return driver.create_table_template.format(
             name=self.table_name,
