@@ -14,13 +14,6 @@ class CheckConstraint:
     expr: str
     name: str | None = None
 
-    def __str__(self) -> str:
-        expr = self.expr.replace('%', '%%')
-        stmt = f'CHECK ({expr})'
-        if self.name:
-            stmt = f'CONSTRAINT {self.name} {stmt}'
-        return stmt
-
 
 @dataclasses.dataclass
 class UniqueConstraint:
@@ -293,12 +286,19 @@ class CreateTableOp(Operation):
                 include=' INCLUDE (%s)' % ', '.join(constraint.include) if constraint.include else '',
             )
 
+        def compile_check_constraint(constraint: CheckConstraint) -> str:
+            expr = constraint.expr.replace('%', '%%')
+            return driver.check_constraint_template.format(
+                expr=expr,
+                constraint=f'CONSTRAINT {constraint.name} ' if constraint.name else '',
+            )
+
         column_stmts = [
             '    '
             + driver.column_template.format(
                 name=column.name,
                 null='' if column.null else ' NOT NULL',
-                check=f' {column.check_constraint}' if column.check_constraint else '',
+                check=f' {compile_check_constraint(column.check_constraint)}' if column.check_constraint else '',
                 type=driver.get_sql_for_type(column.type),
                 default=f" DEFAULT '{column.default}'" if column.default is not None else '',
                 primary_key=' PRIMARY KEY' if pk_count == 1 and column.primary_key else '',
@@ -313,7 +313,7 @@ class CreateTableOp(Operation):
 
         if self.checks:
             for check in self.checks:
-                column_stmts.append(f'    {check}')
+                column_stmts.append(f'    {compile_check_constraint(check)}')
 
         if self.unique:
             unique_stmt = compile_unique_constraint(self.unique)
