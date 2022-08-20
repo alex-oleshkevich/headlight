@@ -31,6 +31,7 @@ class DbDriver(abc.ABC):
     index_column_template = '{expr}{collation}{opclass}{opclass_params}{sorting}{nulls}'
     unique_constraint_template = '{constraint}UNIQUE{columns}{include}'
     check_constraint_template = '{constraint}CHECK ({expr})'
+    foreign_key_template = '{constraint}{self_columns}{references}{match}{on_delete}{on_update}{columns}'
 
     @classmethod
     @abc.abstractmethod

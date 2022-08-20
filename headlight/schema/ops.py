@@ -36,18 +36,6 @@ class ForeignKey:
     name: str | None = None
     match: MatchType | None = None
 
-    def __str__(self) -> str:
-        stmt = '{constraint}{self_columns}{references}{match}{on_delete}{on_update}{columns}'.format(
-            self_columns='FOREIGN KEY (%s) ' % ', '.join(self.self_columns) if self.self_columns else '',
-            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
-            references=f'REFERENCES {self.target_table}',
-            columns=' (%s)' % ', '.join(self.target_columns) if self.target_columns else '',
-            on_delete=f' ON DELETE {self.on_delete}' if self.on_delete else '',
-            on_update=f' ON UPDATE {self.on_update}' if self.on_update else '',
-            match=f' MATCH {self.match}' if self.match else '',
-        )
-        return stmt
-
 
 @dataclasses.dataclass
 class Column:
@@ -293,6 +281,17 @@ class CreateTableOp(Operation):
                 constraint=f'CONSTRAINT {constraint.name} ' if constraint.name else '',
             )
 
+        def compile_foreign_key(key: ForeignKey) -> str:
+            return driver.foreign_key_template.format(
+                self_columns='FOREIGN KEY (%s) ' % ', '.join(key.self_columns) if key.self_columns else '',
+                constraint=f'CONSTRAINT {key.name} ' if key.name else '',
+                references=f'REFERENCES {key.target_table}',
+                columns=' (%s)' % ', '.join(key.target_columns) if key.target_columns else '',
+                on_delete=f' ON DELETE {key.on_delete}' if key.on_delete else '',
+                on_update=f' ON UPDATE {key.on_update}' if key.on_update else '',
+                match=f' MATCH {key.match}' if key.match else '',
+            )
+
         column_stmts = [
             '    '
             + driver.column_template.format(
@@ -302,7 +301,7 @@ class CreateTableOp(Operation):
                 type=driver.get_sql_for_type(column.type),
                 default=f" DEFAULT '{column.default}'" if column.default is not None else '',
                 primary_key=' PRIMARY KEY' if pk_count == 1 and column.primary_key else '',
-                foreign=f' {column.foreign_key}' if column.foreign_key else '',
+                foreign=f' {compile_foreign_key(column.foreign_key)}' if column.foreign_key else '',
                 unique=f' {compile_unique_constraint(column.unique_constraint)}' if column.unique_constraint else ''
             )
             for column in self.columns
@@ -321,7 +320,7 @@ class CreateTableOp(Operation):
 
         if self.foreign_keys:
             for fk in self.foreign_keys:
-                column_stmts.append(f'    {fk}')
+                column_stmts.append(f'    {compile_foreign_key(fk)}')
 
         return driver.create_table_template.format(
             name=self.table_name,
