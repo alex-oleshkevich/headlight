@@ -40,6 +40,7 @@ class UniqueConstraint:
 
 
 Action = typing.Literal['RESTRICT', 'CASCADE', 'NO ACTION', 'SET NULL', 'SET DEFAULT']
+MatchType = typing.Literal['FULL', 'PARTIAL', 'SIMPLE']
 
 
 @dataclasses.dataclass
@@ -50,20 +51,17 @@ class ForeignKey:
     on_delete: Action | None = None
     on_update: Action | None = None
     name: str | None = None
+    match: MatchType | None = None
 
     def __str__(self) -> str:
-        stmt = ''
-        if self.name:
-            stmt += f'CONSTRAINT {self.name} '
-
-        if self.self_columns:
-            stmt += 'FOREIGN KEY (%s) ' % ', '.join(self.self_columns)
-
-        stmt += 'REFERENCES {table}{columns}{on_delete}{on_update}'.format(
-            table=self.target_table,
-            columns='(%s) ' % ', '.join(self.target_columns) if self.target_columns else '',
+        stmt = '{constraint}{self_columns}{references}{match}{on_delete}{on_update}{columns}'.format(
+            self_columns='FOREIGN KEY (%s) ' % ', '.join(self.self_columns) if self.self_columns else '',
+            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
+            references=f'REFERENCES {self.target_table}',
+            columns=' (%s)' % ', '.join(self.target_columns) if self.target_columns else '',
             on_delete=f' ON DELETE {self.on_delete}' if self.on_delete else '',
             on_update=f' ON UPDATE {self.on_update}' if self.on_update else '',
+            match=f' MATCH {self.match}' if self.match else '',
         )
         return stmt
 
@@ -96,12 +94,14 @@ class Column:
         columns: list[str] | None = None,
         on_delete: Action | None = None,
         on_update: Action | None = None,
+        match: MatchType| None = None,
     ) -> Column:
         self.foreign_key = ForeignKey(
             target_table=table,
             on_delete=on_delete,
             on_update=on_update,
             target_columns=columns,
+            match=match,
         )
         return self
 
@@ -208,10 +208,12 @@ class CreateTableOp(Operation):
         name: str | None = None,
         on_delete: Action | None = None,
         on_update: Action | None = None,
+        match: MatchType | None=None,
     ) -> None:
         self.foreign_keys.append(
             ForeignKey(
                 name=name,
+                match=match,
                 on_delete=on_delete,
                 on_update=on_update,
                 self_columns=columns,
