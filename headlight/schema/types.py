@@ -21,6 +21,12 @@ class StringType(Type):
         return driver.get_sql_for_type(self)
 
 
+class TextType(Type):
+
+    def get_sql(self, driver: DbDriver) -> str:
+        return driver.get_sql_for_type(self)
+
+
 class IntegerType(Type):
     type = 'INTEGER'
 

@@ -4,7 +4,7 @@ import psycopg2
 import typing
 
 from headlight.drivers.base import DbDriver
-from headlight.schema.types import IntegerType, StringType, Type
+from headlight.schema import types
 
 
 class PgDriver(DbDriver):
@@ -31,10 +31,12 @@ class PgDriver(DbDriver):
         cursor = self.conn.cursor()
         cursor.execute(stmt, params or [])
 
-    def get_sql_for_type(self, type: Type) -> str:
+    def get_sql_for_type(self, type: types.Type) -> str:
         match type:
-            case IntegerType(auto_increment=auto_increment):
+            case types.IntegerType(auto_increment=auto_increment):
                 return 'SERIAL' if auto_increment else 'INTEGER'
-            case StringType(length=length):
+            case types.StringType(length=length):
                 return f'VARCHAR({length})' if length else 'VARCHAR'
+            case types.TextType():
+                return 'TEXT'
         raise ValueError(f'Cannot generate SQL for type: {type:r}')

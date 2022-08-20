@@ -23,6 +23,12 @@ class DbDriver(abc.ABC):
     create_table_template = 'CREATE TABLE{if_not_exists}{name} ({column_sql})'
     drop_table_template = 'DROP TABLE {name}'
     column_template = '{name} {type}{primary_key}{check}{unique}{null}{default}{foreign}'
+    create_index_template = (
+        'CREATE{unique} INDEX{concurrently}{if_not_exists}{name} ON{only} {table}{using} ({columns})'
+        '{include}{with_}{tablespace}{where}'
+    )
+    drop_index_template = 'DROP INDEX {name}'
+    index_column_template = '{expr}{collation}{opclass}{opclass_params}{sorting}{nulls}'
 
     @classmethod
     @abc.abstractmethod
@@ -39,7 +45,9 @@ class DbDriver(abc.ABC):
 
     def create_migrations_table(self, table: str) -> None:
         assert self.table_template
+        self.execute('BEGIN')
         self.execute(self.table_template.format(table=table))
+        self.execute('COMMIT')
 
     def transaction(self) -> Transaction:
         return Transaction(self)

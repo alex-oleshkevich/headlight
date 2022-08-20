@@ -94,7 +94,7 @@ class Column:
         columns: list[str] | None = None,
         on_delete: Action | None = None,
         on_update: Action | None = None,
-        match: MatchType| None = None,
+        match: MatchType | None = None,
     ) -> Column:
         self.foreign_key = ForeignKey(
             target_table=table,
@@ -126,6 +126,76 @@ class RunSqlOp(Operation):
 
     def to_down_sql(self, driver: DbDriver) -> str:
         return self.down_sql
+
+
+@dataclasses.dataclass
+class IndexExpr:
+    column: str
+    collation: str = ''
+    opclass: str = ''
+    opclass_params: str = ''
+    sorting: typing.Literal['ASC', 'DESC'] | None = None
+    nulls: typing.Literal['FIRST', 'LAST'] | None = None
+
+
+class CreateIndexOp(Operation):
+    def __init__(
+        self,
+        table: str,
+        columns: list[IndexExpr],
+        name: str | None = None,
+        unique: bool = False,
+        concurrently: bool = False,
+        if_not_exists: bool = False,
+        only: bool = False,
+        using: str | None = None,
+        include: list[str] | None = None,
+        with_: str | None = None,
+        where: str | None = None,
+        tablespace: str | None = None,
+    ) -> None:
+        index_name = table + '_' + '_'.join([expr.column for expr in columns]) + '_idx'
+
+        self.table = table
+        self.columns = columns
+        self.name = name or index_name
+        self.unique = unique
+        self.concurrently = concurrently
+        self.if_not_exists = if_not_exists
+        self.only = only
+        self.using = using
+        self.include = include
+        self.with_ = with_
+        self.where = where
+        self.tablespace = tablespace
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.create_index_template.format(
+            unique=' UNIQUE' if self.unique else '',
+            concurrently=' CONCURRENTLY' if self.concurrently else '',
+            if_not_exists=' IF NOT EXISTS' if self.if_not_exists else '',
+            name=f' {self.name}' if self.name else '',
+            only=' ONLY' if self.only else '',
+            table=self.table,
+            using=f' USING {self.using}' if self.using else '',
+            columns=', '.join([
+                driver.index_column_template.format(
+                    expr=column.column,
+                    collation=f' COLLATE "{column.collation}"' if column.collation else '',
+                    opclass=f' {column.opclass}' if column.opclass else '',
+                    opclass_params=f'({column.opclass_params})' if column.opclass_params else '',
+                    sorting=f' {column.sorting}' if column.sorting else '',
+                    nulls=f' NULLS {column.nulls}' if column.nulls else '',
+                ) for column in self.columns
+            ]),
+            include=f' INCLUDE (%s)' % ', '.join(self.include) if self.include else '',
+            with_=f' WITH ({self.with_})' if self.with_ else '',
+            tablespace=f' TABLESPACE {self.tablespace}' if self.tablespace else '',
+            where=f' WHERE {self.where}' if self.where else '',
+        )
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        return driver.drop_index_template.format(name=self.name)
 
 
 class CreateTableOp(Operation):
@@ -208,7 +278,7 @@ class CreateTableOp(Operation):
         name: str | None = None,
         on_delete: Action | None = None,
         on_update: Action | None = None,
-        match: MatchType | None=None,
+        match: MatchType | None = None,
     ) -> None:
         self.foreign_keys.append(
             ForeignKey(
