@@ -14,16 +14,17 @@ import typing
 from headlight import Schema
 from headlight.database import create_database
 from headlight.drivers.base import AppliedMigration, DbDriver, DummyTransaction
+from headlight.schema.ops import Operation
 
 MIGRATION_TEMPLATE = """
-from headlight import DbDriver, Schema
+from headlight import Schema
 
 date = "{date}"
 author = "{author}"
 transactional = True
 
 
-def migrate(schema: Schema, conn: DbDriver) -> None:
+def migrate(schema: Schema) -> None:
     pass
 
 """
@@ -35,35 +36,33 @@ class Migration:
     file: str
     revision: str
     transactional: bool
-    upgrade_callback: typing.Callable[[DbDriver], None]
-    downgrade_callback: typing.Callable[[DbDriver], None]
+    ops: list[Operation]
 
     @classmethod
-    def from_py_module(cls, py_module: str) -> Migration:
+    def from_py_module(cls, db: DbDriver, py_module: str) -> Migration:
         mod = importlib.import_module(py_module)
-        filename = typing.cast(str, mod.__file__)
+        filename = os.path.basename(typing.cast(str, mod.__file__))
         revision = filename[:15]
         name, _, _ = filename[16:].rpartition('.')
 
-        def upgrade_callback(db: DbDriver) -> None:
-            schema = Schema()
-            mod.migrate(schema, db)
-            commands = schema.get_upgrade_commands()
-            db.execute(';'.join(commands))
+        schema = Schema()
+        mod.migrate(schema)
 
-        def downgrade_callback(db: DbDriver) -> None:
-            schema = Schema()
-            mod.migrate(schema, db)
-            commands = schema.get_down_commands()
-            db.execute(';'.join(commands))
+        # stmts = ((op.to_up_sql(db) if upgrade else op.to_down_sql(db)) for op in ops)
+        # sql = ';\n'.join(stmts)
+        # if print_sql:
+        #     sys.stderr.write(f'\n-- rev. {revision}, file: {filename}\n')
+        #     sys.stderr.write(sql)
+        #     sys.stderr.write(f'\n-- end rev. {revision}\n')
+        # if not dry_run:
+        #     db.execute(sql)
 
         return Migration(
             name=name,
             file=filename,
             revision=revision,
+            ops=schema.get_ops(),
             transactional=getattr(mod, 'transactional', True),
-            upgrade_callback=upgrade_callback,
-            downgrade_callback=downgrade_callback,
         )
 
 
@@ -99,7 +98,7 @@ class Migrator:
         sys.path.insert(0, self.directory)
         migration_files = glob.glob(f'{self.directory}/*.py')
         return [
-            Migration.from_py_module(os.path.basename(py_module.replace('.py', '')))
+            Migration.from_py_module(self.db, os.path.basename(py_module.replace('.py', '')))
             for py_module in sorted(migration_files)
         ]
 
@@ -110,11 +109,18 @@ class Migrator:
         applied = self.get_applied_migrations()
         return [migration for migration in self.get_migrations() if migration.revision not in applied]
 
-    def upgrade(self, *, dry_run: bool = False, fake: bool = False, hooks: MigrateHooks | None = None) -> None:
+    def upgrade(
+        self,
+        *,
+        dry_run: bool = False,
+        fake: bool = False,
+        print_sql: bool = False,
+        hooks: MigrateHooks | None = None,
+    ) -> None:
         pending = self.get_pending_migrations()
 
         for migration in pending:
-            self.apply_migration(migration, dry_run=dry_run, fake=fake, hooks=hooks)
+            self.apply_migration(migration, dry_run=dry_run, fake=fake, print_sql=print_sql, hooks=hooks)
 
     def downgrade(
         self,
@@ -122,13 +128,14 @@ class Migrator:
         steps: int,
         fake: bool = False,
         dry_run: bool = False,
+        print_sql: bool = False,
         hooks: MigrateHooks | None = None,
     ) -> None:
         applied = self.get_applied_migrations(steps)
         pending = [migration for migration in self.get_migrations() if migration.revision in applied]
 
         for migration in pending:
-            self.apply_migration(migration, dry_run=dry_run, fake=fake, hooks=hooks, upgrade=False)
+            self.apply_migration(migration, dry_run=dry_run, fake=fake, print_sql=print_sql, hooks=hooks, upgrade=False)
 
     def apply_migration(
         self,
@@ -137,6 +144,7 @@ class Migrator:
         fake: bool,
         dry_run: bool,
         upgrade: bool = True,
+        print_sql: bool = False,
         hooks: MigrateHooks | None = None,
     ) -> None:
         tx = self.db.transaction() if migration.transactional else DummyTransaction(self.db)
@@ -145,13 +153,23 @@ class Migrator:
         try:
             with tx:
                 hooks.before_migrate(migration)
-                if not dry_run and not fake:
+                stmts = [(op.to_up_sql(self.db) if upgrade else op.to_down_sql(self.db)) for op in migration.ops]
+                sql = ';\n'.join(stmts)
+                if print_sql:
+                    sys.stderr.write(f'\n-- rev. {migration.revision} from {migration.file}\n')
+                    sys.stderr.write(sql)
+                    sys.stderr.write(f'\n-- end rev. {migration.revision}\n')
+
+                if not dry_run:
+                    if not fake:
+                        for stmt in stmts:
+                            self.db.execute(stmt)
+
                     if upgrade:
-                        migration.upgrade_callback(self.db)
                         self.db.add_applied_migration(self.table, migration.revision, migration.name)
                     else:
-                        migration.downgrade_callback(self.db)
                         self.db.remove_applied_migration(self.table, migration.revision)
+
                 time_taken = time.time() - start_time
                 hooks.after_migrate(migration, time_taken)
         except Exception as ex:

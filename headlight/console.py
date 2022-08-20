@@ -9,6 +9,7 @@ dry_run_help = 'Simulate migration execution (nothing will be applied to the dat
 table_help = 'History table name.'
 revert_steps_help = 'The number of migrations to be reverted.'
 fake_help = 'Write history table records without running any SQL command.'
+print_help = 'Print generated SQL to stderr.'
 migration_name_help = 'The name of the migration.'
 
 DATABASE_ENVVAR = 'HL_DATABASE_URL'
@@ -60,6 +61,7 @@ def app() -> None:
 @click.option('--dry-run', is_flag=True, default=False, show_default=True, help=dry_run_help)
 @click.option('--table', default='migrations', show_default=True, help=table_help)
 @click.option('--fake', is_flag=True, default=False, help=fake_help)
+@click.option('--print-sql', is_flag=True, default=False, help=print_help)
 def upgrade(
     *,
     database: str,
@@ -67,10 +69,11 @@ def upgrade(
     table: str,
     fake: bool,
     dry_run: bool,
+    print_sql: bool,
 ) -> None:
     migrator = Migrator(database, migrations, table)
     migrator.initialize_db()
-    migrator.upgrade(fake=fake, dry_run=dry_run, hooks=LoggingHooks())
+    migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
 
 
 @app.command()
@@ -87,6 +90,7 @@ def upgrade(
 @click.option('--table', default='migrations', show_default=True, help=table_help)
 @click.option('--fake', is_flag=True, default=False, help=fake_help)
 @click.option('--steps', type=int, default=1, help=revert_steps_help, show_default=True)
+@click.option('--print-sql', is_flag=True, default=False, help=print_help)
 def downgrade(
     *,
     database: str,
@@ -94,12 +98,13 @@ def downgrade(
     table: str,
     fake: bool,
     dry_run: bool,
+    print_sql: bool,
     steps: int,
 ) -> None:
     migrator = Migrator(database, migrations, table)
     migrator.initialize_db()
     try:
-        migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, hooks=LoggingHooks())
+        migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
     except Exception as ex:
         click.secho(click.style(ex, fg='red'), err=True)
 

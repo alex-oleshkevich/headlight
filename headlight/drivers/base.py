@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import abc
-import types
 import typing
 from datetime import datetime
+from types import TracebackType
+
+from headlight.schema import types
 
 T = typing.TypeVar('T', bound='DbDriver')
 
@@ -18,8 +20,12 @@ class DbDriver(abc.ABC):
     table_template = ''
     placeholder_mark = '?'
 
+    create_table_template = 'CREATE TABLE{if_not_exists}{name} ({column_sql})'
+    drop_table_template = 'DROP TABLE {name}'
+    column_template = '{name} {type}{primary_key}{unique}{null}{default}'
+
     @classmethod
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def from_url(cls: typing.Type[T], url: str) -> T:
         raise NotImplementedError()
 
@@ -59,6 +65,10 @@ class DbDriver(abc.ABC):
                 'applied': datetime.fromisoformat(row[2]),
             }
 
+    @abc.abstractmethod
+    def get_sql_for_type(self, type: types.Type) -> str:
+        raise NotImplementedError
+
 
 class Transaction:
     def __init__(self, db: DbDriver) -> None:
@@ -77,7 +87,7 @@ class Transaction:
     def __enter__(self) -> Transaction:
         return self.begin()
 
-    def __exit__(self, exc_type: typing.Type[Exception], exc: BaseException, tb: types.TracebackType) -> None:
+    def __exit__(self, exc_type: typing.Type[Exception], exc: BaseException, tb: TracebackType) -> None:
         if exc:
             self.rollback()
         else:
