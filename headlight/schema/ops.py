@@ -82,30 +82,6 @@ class RunSqlOp(Operation):
         return self.down_sql
 
 
-class AddColumnOp(Operation):
-    def __init__(
-        self,
-        column_name: str,
-        column_type: Type,
-        null: bool = False,
-        default: str | None = None,
-        unique: bool = False,
-        primary_key: bool = False,
-        auto_increment: bool = False,
-        if_not_exists: bool = False,
-        comment: str | None = None,
-    ) -> None:
-        self._column_name = column_name
-        self._column_type = column_type
-        self._null = null
-        self._default = default
-        self._unique = unique
-        self._primary_key = primary_key
-        self._auto_increment = auto_increment
-        self._if_not_exists = if_not_exists
-        self._comment = comment
-
-
 class CreateTableOp(Operation):
     def __init__(
         self,
@@ -119,7 +95,50 @@ class CreateTableOp(Operation):
         self.extra_ops: list[Operation] = []
         self.unique: UniqueConstraint | None = None
 
-    def add_column(self, column: Column) -> Column:
+    def add_column(
+        self,
+        name: str,
+        type: Type,
+        null: bool = False,
+        default: str | None = None,
+        primary_key: bool = False,
+        auto_increment: bool = False,
+        if_not_exists: bool = False,
+        comment: str | None = None,
+        unique: UniqueConstraint | bool | str | None = None,
+        check: CheckConstraint | str | tuple[str, str] | None = None,
+    ) -> Column:
+        unique_constraint: UniqueConstraint | None = None
+        match unique:
+            case UniqueConstraint():
+                unique_constraint = unique
+            case True:
+                unique_constraint = UniqueConstraint()
+            case constraint_name if isinstance(constraint_name, str):
+                unique_constraint = UniqueConstraint(name=constraint_name)
+
+        check_constraint: CheckConstraint | None = None
+        match check:
+            case CheckConstraint():
+                check_constraint = check
+            case expr if isinstance(expr, str):
+                check_constraint = CheckConstraint(expr=expr)
+            case (constraint_name, expr):
+                check_constraint = CheckConstraint(expr=expr, name=constraint_name)
+
+        column = Column(
+            name=name,
+            type=type,
+            null=null,
+            default=default,
+            primary_key=primary_key,
+            auto_increment=auto_increment,
+            if_not_exists=if_not_exists,
+            comment=comment,
+            unique_constraint=unique_constraint,
+            check_constraint=check_constraint,
+        )
+
         self.columns.append(column)
         return column
 
