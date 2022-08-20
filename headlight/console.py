@@ -71,9 +71,20 @@ def upgrade(
     dry_run: bool,
     print_sql: bool,
 ) -> None:
-    migrator = Migrator(database, migrations, table)
-    migrator.initialize_db()
-    migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
+    _, _, db_name = database.rpartition('/')
+    click.secho(
+        'Upgrade database {db}.'.format(
+            db=click.style(db_name, fg='cyan'),
+        )
+    )
+    try:
+        migrator = Migrator(database, migrations, table)
+        migrator.initialize_db()
+        migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
+    except Exception as ex:
+        click.secho(click.style(ex, fg='red'))
+    finally:
+        click.echo('Done')
 
 
 @app.command()
@@ -101,12 +112,22 @@ def downgrade(
     print_sql: bool,
     steps: int,
 ) -> None:
+    _, _, db_name = database.rpartition('/')
+    click.secho(
+        'Downgrade database {db} by {steps} steps.'.format(
+            db=click.style(db_name, fg='cyan'),
+            steps=click.style(steps, fg='cyan'),
+        )
+    )
+
     migrator = Migrator(database, migrations, table)
     migrator.initialize_db()
     try:
         migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
     except Exception as ex:
-        click.secho(click.style(ex, fg='red'), err=True)
+        click.secho(click.style(ex, fg='red'))
+    finally:
+        click.echo('Done')
 
 
 @app.command

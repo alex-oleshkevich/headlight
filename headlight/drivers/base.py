@@ -22,7 +22,7 @@ class DbDriver(abc.ABC):
 
     create_table_template = 'CREATE TABLE{if_not_exists}{name} ({column_sql})'
     drop_table_template = 'DROP TABLE {name}'
-    column_template = '{name} {type}{primary_key}{unique}{null}{default}'
+    column_template = '{name} {type}{primary_key}{check}{unique}{null}{default}'
 
     @classmethod
     @abc.abstractmethod
