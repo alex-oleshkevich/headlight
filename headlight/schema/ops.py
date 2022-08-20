@@ -4,7 +4,7 @@ import dataclasses
 
 import abc
 
-from headlight import DbDriver
+from headlight.drivers.base import DbDriver
 from headlight.schema.types import Type
 
 
@@ -44,19 +44,19 @@ class Column:
     type: Type
     null: bool = False
     default: str | None = None
-    unique: UniqueConstraint | None = None
     primary_key: bool = False
     auto_increment: bool = False
     if_not_exists: bool = False
     comment: str | None = None
-    check: CheckConstraint | None = None
+    unique_constraint: UniqueConstraint | None = None
+    check_constraint: CheckConstraint | None = None
 
-    def check_constraint(self, expr: str, name: str | None) -> Column:
-        self.check = CheckConstraint(expr, name)
+    def check(self, expr: str, name: str | None = None) -> Column:
+        self.check_constraint = CheckConstraint(expr, name)
         return self
 
-    def unique_constraint(self, name: str | None = None) -> Column:
-        self.unique = UniqueConstraint(name)
+    def unique(self, name: str | None = None) -> Column:
+        self.unique_constraint = UniqueConstraint(name)
         return self
 
 
@@ -138,18 +138,13 @@ class CreateTableOp(Operation):
         pk_cols = [col for col in self.columns if col.primary_key]
         pk_count = len(pk_cols)
 
-        def make_check_constraint(column: Column) -> str:
-            if not column.check:
-                return ''
-            return ' ' + str(column.check)
-
         column_stmts = [
             '    '
             + driver.column_template.format(
                 name=column.name,
-                check=make_check_constraint(column),
                 null='' if column.null else ' NOT NULL',
-                unique=f' {column.unique}' if column.unique else '',
+                check=f' {column.check_constraint}' if column.check_constraint else '',
+                unique=f' {column.unique_constraint}' if column.unique_constraint else '',
                 type=driver.get_sql_for_type(column.type),
                 default=f" DEFAULT '{column.default}'" if column.default is not None else '',
                 primary_key=' PRIMARY KEY' if pk_count == 1 and column.primary_key else '',
