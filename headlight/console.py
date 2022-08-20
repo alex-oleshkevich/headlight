@@ -82,7 +82,7 @@ def upgrade(
         migrator.initialize_db()
         migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
     except Exception as ex:
-        click.secho(click.style(ex, fg='red'))
+        raise ex from None
     finally:
         click.echo('Done')
 
@@ -125,7 +125,7 @@ def downgrade(
     try:
         migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
     except Exception as ex:
-        click.secho(click.style(ex, fg='red'))
+        raise ex from None
     finally:
         click.echo('Done')
 

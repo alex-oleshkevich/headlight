@@ -28,16 +28,6 @@ class UniqueConstraint:
     include: list[str] | None = None
     columns: list[str] | None = None
 
-    def __str__(self) -> str:
-        stmt = 'UNIQUE'
-        if self.name:
-            stmt = f'CONSTRAINT {self.name} {stmt}'
-        if self.columns:
-            stmt += ' (%s)' % ', '.join(self.columns)
-        if self.include:
-            stmt += ' INCLUDE (%s)' % ', '.join(self.include)
-        return stmt
-
 
 Action = typing.Literal['RESTRICT', 'CASCADE', 'NO ACTION', 'SET NULL', 'SET DEFAULT']
 MatchType = typing.Literal['FULL', 'PARTIAL', 'SIMPLE']
@@ -296,17 +286,24 @@ class CreateTableOp(Operation):
         pk_cols = [col for col in self.columns if col.primary_key]
         pk_count = len(pk_cols)
 
+        def compile_unique_constraint(constraint: UniqueConstraint) -> str:
+            return driver.unique_constraint_template.format(
+                constraint=f'CONSTRAINT {constraint.name} ' if constraint.name else '',
+                columns=' (%s)' % ', '.join(constraint.columns) if constraint.columns else '',
+                include=' INCLUDE (%s)' % ', '.join(constraint.include) if constraint.include else '',
+            )
+
         column_stmts = [
             '    '
             + driver.column_template.format(
                 name=column.name,
                 null='' if column.null else ' NOT NULL',
                 check=f' {column.check_constraint}' if column.check_constraint else '',
-                unique=f' {column.unique_constraint}' if column.unique_constraint else '',
                 type=driver.get_sql_for_type(column.type),
                 default=f" DEFAULT '{column.default}'" if column.default is not None else '',
                 primary_key=' PRIMARY KEY' if pk_count == 1 and column.primary_key else '',
                 foreign=f' {column.foreign_key}' if column.foreign_key else '',
+                unique=f' {compile_unique_constraint(column.unique_constraint)}' if column.unique_constraint else ''
             )
             for column in self.columns
         ]
@@ -319,7 +316,8 @@ class CreateTableOp(Operation):
                 column_stmts.append(f'    {check}')
 
         if self.unique:
-            column_stmts.append(f'    {self.unique}')
+            unique_stmt = compile_unique_constraint(self.unique)
+            column_stmts.append(f'    {unique_stmt}')
 
         if self.foreign_keys:
             for fk in self.foreign_keys:

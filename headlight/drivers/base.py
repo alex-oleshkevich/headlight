@@ -29,6 +29,7 @@ class DbDriver(abc.ABC):
     )
     drop_index_template = 'DROP INDEX {name}'
     index_column_template = '{expr}{collation}{opclass}{opclass_params}{sorting}{nulls}'
+    unique_constraint_template = '{constraint}UNIQUE{columns}{include}'
 
     @classmethod
     @abc.abstractmethod
