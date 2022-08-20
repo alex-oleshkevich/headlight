@@ -13,7 +13,7 @@ import typing
 
 from headlight import Schema
 from headlight.database import create_database
-from headlight.drivers.base import AppliedMigration, DbDriver, DummyTransaction
+from headlight.drivers.base import AppliedMigration, DummyTransaction
 from headlight.schema.ops import Operation
 
 MIGRATION_TEMPLATE = """
@@ -30,6 +30,12 @@ def migrate(schema: Schema) -> None:
 """
 
 
+class MigrationError(Exception):
+    def __init__(self, message: str, sql: str) -> None:
+        super().__init__(message)
+        self.sql = sql
+
+
 @dataclass
 class Migration:
     name: str
@@ -39,7 +45,7 @@ class Migration:
     ops: list[Operation]
 
     @classmethod
-    def from_py_module(cls, db: DbDriver, py_module: str) -> Migration:
+    def from_py_module(cls, py_module: str) -> Migration:
         mod = importlib.import_module(py_module)
         filename = os.path.basename(typing.cast(str, mod.__file__))
         revision = filename[:15]
@@ -47,15 +53,6 @@ class Migration:
 
         schema = Schema()
         mod.migrate(schema)
-
-        # stmts = ((op.to_up_sql(db) if upgrade else op.to_down_sql(db)) for op in ops)
-        # sql = ';\n'.join(stmts)
-        # if print_sql:
-        #     sys.stderr.write(f'\n-- rev. {revision}, file: {filename}\n')
-        #     sys.stderr.write(sql)
-        #     sys.stderr.write(f'\n-- end rev. {revision}\n')
-        # if not dry_run:
-        #     db.execute(sql)
 
         return Migration(
             name=name,
@@ -98,7 +95,7 @@ class Migrator:
         sys.path.insert(0, self.directory)
         migration_files = glob.glob(f'{self.directory}/*.py')
         return [
-            Migration.from_py_module(self.db, os.path.basename(py_module.replace('.py', '')))
+            Migration.from_py_module(os.path.basename(py_module.replace('.py', '')))
             for py_module in sorted(migration_files)
         ]
 
