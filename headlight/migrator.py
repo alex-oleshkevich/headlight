@@ -6,6 +6,7 @@ import datetime
 import getpass
 import glob
 import importlib
+import io
 import os
 import sys
 import time
@@ -15,6 +16,7 @@ from headlight.database import create_database
 from headlight.drivers.base import AppliedMigration, DummyTransaction
 from headlight.schema.builder import Blueprint
 from headlight.schema.ops import Operation
+from headlight.utils import colorize_sql
 
 MIGRATION_TEMPLATE = """
 from headlight import Blueprint, types
@@ -144,6 +146,7 @@ class Migrator:
         upgrade: bool = True,
         print_sql: bool = False,
         hooks: MigrateHooks | None = None,
+        writer: io.StringIO = sys.stderr,
     ) -> None:
         tx = self.db.transaction() if migration.transactional else DummyTransaction(self.db)
         start_time = time.time()
@@ -156,11 +159,13 @@ class Migrator:
                 if not upgrade:
                     stmts = list(reversed(stmts))
 
-                sql = ';\n'.join(stmts)
+                sql = ';\n'.join(stmts) + ';'
                 if print_sql:
-                    sys.stderr.write(f'\n-- rev. {migration.revision} from {migration.file}\n')
-                    sys.stderr.write(sql)
-                    sys.stderr.write(f'\n-- end rev. {migration.revision}\n')
+                    writer.write('\n')
+                    writer.write(colorize_sql(f'-- rev. {migration.revision} from {migration.file}'))
+                    writer.write(colorize_sql(sql))
+                    writer.write(colorize_sql(f'-- end rev. {migration.revision}'))
+                    writer.write('\n')
 
                 if not dry_run:
                     if not fake:

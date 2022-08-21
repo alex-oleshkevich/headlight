@@ -4,6 +4,7 @@ import pathlib
 import tomli
 
 from headlight.migrator import MigrateHooks, Migration, MigrationError, Migrator, create_migration_template
+from headlight.utils import colorize_sql
 
 database_help = 'Database connection URL.'
 migrations_help = 'Migrations directory.'
@@ -45,17 +46,6 @@ class LoggingHooks(MigrateHooks):
                 filename=os.path.basename(migration.file),
             )
         )
-
-
-def colorize_sql(sql: str) -> str:
-    try:
-        import pygments
-        from pygments.formatters import get_formatter_by_name
-        from pygments.lexers import get_lexer_by_name
-
-        return pygments.highlight(sql, get_lexer_by_name('sql'), get_formatter_by_name('terminal'))
-    except ImportError:
-        return sql
 
 
 def get_config_from_pyproject() -> dict[str, str]:
