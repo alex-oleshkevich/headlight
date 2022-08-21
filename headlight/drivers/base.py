@@ -40,6 +40,9 @@ class DbDriver(abc.ABC):
     add_column_default_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} SET DEFAULT {expr}'
     drop_column_default_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} DROP DEFAULT'
 
+    add_column_null_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} SET NOT NULL'
+    drop_column_null_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} DROP NOT NULL'
+
     @classmethod
     @abc.abstractmethod
     def from_url(cls: typing.Type[T], url: str) -> T:

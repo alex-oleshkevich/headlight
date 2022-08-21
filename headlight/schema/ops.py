@@ -530,6 +530,66 @@ class DropDefaultOp(Operation):
         ).to_up_sql(driver)
 
 
+class SetNullOp(Operation):
+    def __init__(
+        self,
+        table_name: str,
+        column_name: str,
+        only: bool = False,
+        if_table_exists: bool = False,
+    ) -> None:
+        self.only = only
+        self.table_name = table_name
+        self.column_name = column_name
+        self.if_table_exists = if_table_exists
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.add_column_null_template.format(
+            table=self.table_name,
+            name=self.column_name,
+            only=' ONLY' if self.only else '',
+            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
+        )
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        return DropNullOp(
+            table_name=self.table_name,
+            column_name=self.column_name,
+            only=self.only,
+            if_table_exists=self.if_table_exists,
+        ).to_up_sql(driver)
+
+
+class DropNullOp(Operation):
+    def __init__(
+        self,
+        table_name: str,
+        column_name: str,
+        only: bool = False,
+        if_table_exists: bool = False,
+    ) -> None:
+        self.only = only
+        self.table_name = table_name
+        self.column_name = column_name
+        self.if_table_exists = if_table_exists
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.drop_column_null_template.format(
+            table=self.table_name,
+            name=self.column_name,
+            only=' ONLY' if self.only else '',
+            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
+        )
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        return SetNullOp(
+            table_name=self.table_name,
+            column_name=self.column_name,
+            only=self.only,
+            if_table_exists=self.if_table_exists,
+        ).to_up_sql(driver)
+
+
 class ChangeColumn:
     def __init__(
         self,
@@ -568,6 +628,27 @@ class ChangeColumn:
                 if_table_exists=self.if_table_exists,
             )
         )
+        return self
+
+    def set_nullable(self, flag: bool) -> ChangeColumn:
+        if flag:
+            self._ops.append(
+                DropNullOp(
+                    table_name=self.table_name,
+                    column_name=self.column_name,
+                    only=self.only,
+                    if_table_exists=self.if_table_exists,
+                )
+            )
+        else:
+            self._ops.append(
+                SetNullOp(
+                    table_name=self.table_name,
+                    column_name=self.column_name,
+                    only=self.only,
+                    if_table_exists=self.if_table_exists,
+                )
+            )
         return self
 
 
