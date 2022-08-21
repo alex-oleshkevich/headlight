@@ -1,168 +1,151 @@
-import contextlib
+from __future__ import annotations
+
+import dataclasses
+
 import typing
 
-from headlight.schema import ops, types
+from headlight.drivers.base import DbDriver
+from headlight.schema import types
+
+Action = typing.Literal['RESTRICT', 'CASCADE', 'NO ACTION', 'SET NULL', 'SET DEFAULT']
+MatchType = typing.Literal['FULL', 'PARTIAL', 'SIMPLE']
 
 
-class Table:
+@dataclasses.dataclass
+class IndexExpr:
+    column: str
+    collation: str = ''
+    opclass: str = ''
+    opclass_params: str = ''
+    sorting: typing.Literal['ASC', 'DESC'] | None = None
+    nulls: typing.Literal['FIRST', 'LAST'] | None = None
+
+
+@dataclasses.dataclass
+class Constraint:
+    def compile(self, driver: DbDriver) -> str:
+        raise NotImplementedError()
+
+
+@dataclasses.dataclass
+class CheckConstraint(Constraint):
+    expr: str
+    name: str | None = None
+
+    def compile(self, driver: DbDriver) -> str:
+        expr = self.expr.replace('%', '%%')
+        return driver.check_constraint_template.format(
+            expr=expr,
+            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
+        )
+
+
+@dataclasses.dataclass
+class UniqueConstraint(Constraint):
+    name: str | None = None
+    include: list[str] | None = None
+    columns: list[str] | None = None
+
+    def compile(self, driver: DbDriver) -> str:
+        return driver.unique_constraint_template.format(
+            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
+            columns=' (%s)' % ', '.join(self.columns) if self.columns else '',
+            include=' INCLUDE (%s)' % ', '.join(self.include) if self.include else '',
+        )
+
+
+@dataclasses.dataclass
+class PrimaryKeyConstraint(Constraint):
+    name: str | None
+    columns: list[str]
+    include: list[str] = dataclasses.field(default_factory=list)
+
+    def compile(self, driver: DbDriver) -> str:
+        return driver.primary_key_constraint_template.format(
+            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
+            columns=', '.join(self.columns) if self.columns else '',
+            include=' INCLUDE (%s)' % ', '.join(self.include) if self.include else '',
+        )
+
+
+@dataclasses.dataclass
+class ForeignKey(Constraint):
+    target_table: str
+    target_columns: list[str] | None = None
+    self_columns: list[str] | None = None
+    on_delete: Action | None = None
+    on_update: Action | None = None
+    name: str | None = None
+    match: MatchType | None = None
+
+    def compile(self, driver: DbDriver) -> str:
+        return driver.foreign_key_template.format(
+            self_columns='FOREIGN KEY (%s) ' % ', '.join(self.self_columns) if self.self_columns else '',
+            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
+            references=f'REFERENCES {self.target_table}',
+            columns=' (%s)' % ', '.join(self.target_columns) if self.target_columns else '',
+            on_delete=f' ON DELETE {self.on_delete}' if self.on_delete else '',
+            on_update=f' ON UPDATE {self.on_update}' if self.on_update else '',
+            match=f' MATCH {self.match}' if self.match else '',
+        )
+
+
+@dataclasses.dataclass
+class Column:
     name: str
-    columns: list[ops.Column] = []
-    constraints: list[ops.Constraint] = []
+    type: types.Type
+    null: bool = False
+    default: str | None = None
+    primary_key: bool = False
+    auto_increment: bool = False
+    if_not_exists: bool = False
+    comment: str | None = None
+    unique_constraint: UniqueConstraint | None = None
+    check_constraint: CheckConstraint | None = None
+    foreign_key: ForeignKey | None = None
 
+    def check(self, expr: str, name: str | None = None) -> Column:
+        self.check_constraint = CheckConstraint(expr, name)
+        return self
 
-class Schema:
-    def __init__(self) -> None:
-        self._ops: list[ops.Operation] = []
+    def unique(self, name: str | None = None) -> Column:
+        self.unique_constraint = UniqueConstraint(name)
+        return self
 
-    @contextlib.contextmanager  # type: ignore[arg-type]
-    def create_table(  # type: ignore[misc]
-        self,
-        table_name: str,
-        if_not_exists: bool = False,
-    ) -> typing.ContextManager[ops.CreateTableOp]:
-        op = ops.CreateTableOp(table_name, if_not_exists=if_not_exists)
-        yield op
-        self._ops.extend([op, *op.extra_ops])
-
-    @contextlib.contextmanager  # type: ignore[arg-type]
-    def alter_table(
-        self,
-        table_name: str,
-        if_exists: bool = False,
-        only: bool = False,
-    ) -> typing.ContextManager[ops.AlterTableOp]:  # type: ignore[misc]
-        op = ops.AlterTableOp(table_name=table_name, if_exists=if_exists, only=only)
-        yield op
-        self._ops.extend(op.extra_ops)
-
-    def drop_table(self, table_name: str, create_table: ops.CreateTableOp) -> None:
-        self.add_op(ops.DropTableOp(name=table_name, create_table=create_table))
-
-    def add_index(
+    def references(
         self,
         table: str,
-        columns: list[str | ops.IndexExpr],
-        name: str | None = None,
-        unique: bool = False,
-        concurrently: bool = False,
-        if_not_exists: bool = False,
-        only: bool = False,
-        using: str | None = None,
-        include: list[str] | None = None,
-        with_: str | None = None,
-        where: str | None = None,
-        tablespace: str | None = None,
-    ) -> None:
-        self.add_op(
-            ops.CreateIndexOp(
-                table=table,
-                name=name,
-                unique=unique,
-                concurrently=concurrently,
-                if_not_exists=if_not_exists,
-                only=only,
-                using=using,
-                include=include,
-                with_=with_,
-                where=where,
-                tablespace=tablespace,
-                columns=[ops.IndexExpr(column=column) if isinstance(column, str) else column for column in columns],
-            )
+        columns: list[str] | None = None,
+        on_delete: Action | None = None,
+        on_update: Action | None = None,
+        match: MatchType | None = None,
+    ) -> Column:
+        self.foreign_key = ForeignKey(
+            target_table=table,
+            on_delete=on_delete,
+            on_update=on_update,
+            target_columns=columns,
+            match=match,
         )
+        return self
 
-    def drop_index(self, index_name: str, create_index: ops.CreateIndexOp) -> None:
-        self.add_op(ops.DropIndexOp(name=index_name, create_index=create_index))
 
-    def add_column(
-        self,
-        table_name: str,
-        column_name: str,
-        type: types.Type,
-        null: bool = False,
-        if_column_not_exists: bool = False,
-        if_table_exists: bool = False,
-        unique_constraint: ops.UniqueConstraint | None = None,
-        check_constraint: ops.CheckConstraint | None = None,
-        collate: str | None = None,
-        only: bool = False,
-        default: str | None = None,
-        primary_key: bool | None = None,
-        foreign_key: ops.ForeignKey | None = None,
-    ) -> None:
-        self.add_op(
-            ops.AddColumnOp(
-                table_name=table_name,
-                column_name=column_name,
-                type=type,
-                if_column_not_exists=if_column_not_exists,
-                if_table_exists=if_table_exists,
-                unique_constraint=unique_constraint,
-                check_constraint=check_constraint,
-                collate=collate,
-                only=only,
-                null=null,
-                default=default,
-                primary_key=primary_key,
-                foreign_key=foreign_key,
-            )
-        )
+@dataclasses.dataclass
+class Index:
+    name: str
+    table_name: str
+    unique: bool
+    using: str
+    columns: list[IndexExpr]
+    include: list[str]
+    with_: str
+    tablespace: str
+    where: str
 
-    def drop_column(
-        self,
-        table_name: str,
-        column_name: str,
-        create_column: ops.AddColumnOp,
-        if_column_exists: bool = False,
-        if_table_exists: bool = False,
-        only: bool = False,
-    ) -> None:
-        self.add_op(
-            ops.DropColumnOp(
-                table_name=table_name,
-                column_name=column_name,
-                if_table_exists=if_table_exists,
-                if_column_exists=if_column_exists,
-                only=only,
-                create_column=create_column,
-            )
-        )
 
-    def add_constraint(
-        self,
-        table_name: str,
-        constraint: ops.Constraint,
-        only: bool = False,
-        if_table_exists: bool = False,
-    ) -> None:
-        self.add_op(
-            ops.AddTableConstraintOp(
-                constraint=constraint, table_name=table_name, only=only, if_table_exists=if_table_exists
-            )
-        )
-
-    def drop_constraint(
-        self,
-        constraint_name: str,
-        table_name: str,
-        if_exists: bool = False,
-        only: bool = False,
-        if_table_exists: bool = False,
-    ) -> None:
-        self.add_op(
-            ops.DropTableConstraintOp(
-                constraint_name=constraint_name,
-                table_name=table_name,
-                only=only,
-                if_exists=if_exists,
-                if_table_exists=if_table_exists,
-            )
-        )
-
-    def run_sql(self, up_sql: str, down_sql: str) -> None:
-        self.add_op(ops.RunSqlOp(up_sql, down_sql))
-
-    def add_op(self, operation: ops.Operation) -> None:
-        self._ops.append(operation)
-
-    def get_ops(self) -> list[ops.Operation]:
-        return self._ops
+@dataclasses.dataclass
+class Table:
+    name: str
+    columns: list[Column] = dataclasses.field(default_factory=list)
+    constraints: list[Constraint] = dataclasses.field(default_factory=list)
+    indices: list[Index] = dataclasses.field(default_factory=list)
