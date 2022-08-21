@@ -2,6 +2,7 @@ import click
 import os
 import pathlib
 import tomli
+import traceback
 
 from headlight.migrator import MigrateHooks, Migration, MigrationError, Migrator, create_migration_template
 from headlight.utils import colorize_sql
@@ -147,6 +148,7 @@ def upgrade(
 @click.option('--steps', type=int, default=1, help=revert_steps_help, show_default=True)
 @click.option('--print-sql', is_flag=True, default=False, help=print_help)
 @click.option('--yes', '-y', is_flag=True, default=False, help=yes_help)
+@click.option('--verbose', is_flag=True, default=False)
 def downgrade(
     *,
     database: str,
@@ -157,6 +159,7 @@ def downgrade(
     print_sql: bool,
     yes: bool,
     steps: int,
+    verbose: int,
 ) -> None:
     _, _, db_name = database.rpartition('/')
     db_type, _, _ = database.partition('://')
@@ -182,6 +185,8 @@ def downgrade(
     try:
         migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
     except MigrationError as ex:
+        if verbose:
+            traceback.print_exception(ex)
         click.echo('')
         click.secho('-' * 30 + f' FAIL: {ex.migration.file} ' + '-' * 30, fg='red')
         click.secho(f'Error: {ex}', fg='red')

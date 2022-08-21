@@ -102,7 +102,20 @@ class CreateIndexOp(Operation):
         )
 
     def to_down_sql(self, driver: DbDriver) -> str:
-        return driver.drop_index_template.format(name=self.name)
+        return DropIndexOp(
+            name=self.name,
+            current_index=Index(
+                name=self.name,
+                table_name=self.table,
+                columns=self.columns,
+                unique=self.unique,
+                using=self.using,
+                include=self.include,
+                with_=self.with_,
+                tablespace=self.tablespace,
+                where=self.where,
+            ),
+        ).to_up_sql(driver)
 
 
 class DropIndexOp(Operation):
