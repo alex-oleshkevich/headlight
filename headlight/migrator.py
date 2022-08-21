@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import datetime
 import getpass
 import glob
@@ -8,7 +10,6 @@ import os
 import sys
 import time
 import typing
-from dataclasses import dataclass
 
 from headlight.database import create_database
 from headlight.drivers.base import AppliedMigration, DummyTransaction
@@ -30,9 +31,10 @@ def migrate(schema: Blueprint) -> None:
 
 
 class MigrationError(Exception):
-    def __init__(self, message: str, sql: str) -> None:
+    def __init__(self, message: str, migration: Migration, stmt: str) -> None:
         super().__init__(message)
-        self.sql = sql
+        self.migration = migration
+        self.stmt = stmt
 
 
 @dataclass
@@ -146,6 +148,7 @@ class Migrator:
         tx = self.db.transaction() if migration.transactional else DummyTransaction(self.db)
         start_time = time.time()
         hooks = hooks or MigrateHooks()
+        current_stmt = ''
         try:
             with tx:
                 hooks.before_migrate(migration)
@@ -162,6 +165,7 @@ class Migrator:
                 if not dry_run:
                     if not fake:
                         for stmt in stmts:
+                            current_stmt = stmt
                             self.db.execute(stmt)
 
                     if upgrade:
@@ -174,7 +178,7 @@ class Migrator:
         except Exception as ex:
             time_taken = time.time() - start_time
             hooks.on_error(migration, ex, time_taken)
-            raise
+            raise MigrationError(str(ex), migration, current_stmt) from ex
 
     def status(self) -> typing.Iterable[MigrationStatus]:
         applied = self.get_applied_migrations()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import inspect
+import string
 import typing
 
 from headlight.schema import ops, types
@@ -33,12 +34,12 @@ class CreateTableBuilder:
     def autoincrements(self, name: str = 'id') -> None:
         self.add_column(name=name, type=types.BigIntegerType(auto_increment=True), primary_key=True, null=False)
 
-    def timestamps(self, created_name: str = 'created_at', updated_name: str = 'updated_at') -> None:
-        self.add_column(created_name, types.DateTimeType(True), null=False, default='now()')
-        self.add_column(updated_name, types.DateTimeType(True), null=True)
+    def timestamps(self, created_name: str = 'created_at', updated_name: str = 'updated_at', tz: bool = True) -> None:
+        self.add_column(created_name, types.DateTimeType(tz), null=False, default='now()')
+        self.add_column(updated_name, types.DateTimeType(tz), null=True)
 
-    def created_timestamp(self, created_name: str = 'created_at') -> None:
-        self.add_column(created_name, types.DateTimeType(True), null=False, default='now()')
+    def created_timestamp(self, created_name: str = 'created_at', tz: bool = True) -> None:
+        self.add_column(created_name, types.DateTimeType(tz), null=False, default='now()')
 
     def add_column(
         self,
@@ -104,15 +105,21 @@ class CreateTableBuilder:
         where: str | None = None,
         tablespace: str | None = None,
     ) -> None:
-        index_exprs = [IndexExpr(column) if isinstance(column, str) else column for column in columns]
-        index_name = name or self._table_name + '_' + '_'.join([expr.column for expr in index_exprs]) + '_idx'
+        def sanitize_name(name: str) -> str:
+            return ''.join([c for c in name if c in string.ascii_letters + string.digits])
+
+        index_expr = [IndexExpr(column) if isinstance(column, str) else column for column in columns]
+        index_name = (
+            name or self._table_name + '_' + '_'.join([sanitize_name(expr.column) for expr in index_expr]) + '_idx'
+        )
+
         self._indices.append(
             Index(
                 name=index_name,
                 table_name=self._table_name,
                 unique=unique,
                 using=using,
-                columns=index_exprs,
+                columns=index_expr,
                 include=include,
                 with_=with_,
                 tablespace=tablespace,
@@ -404,6 +411,20 @@ class Blueprint:
                 if_not_exists=if_not_exists,
             )
         )
+        for index in builder._indices:
+            self._ops.append(
+                ops.CreateIndexOp(
+                    table=index.table_name,
+                    columns=index.columns,
+                    name=index.name,
+                    unique=index.unique,
+                    using=index.using,
+                    include=index.include,
+                    with_=index.with_,
+                    where=index.where,
+                    tablespace=index.tablespace,
+                )
+            )
 
     @contextlib.contextmanager  # type: ignore[arg-type]
     def alter_table(

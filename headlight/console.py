@@ -1,10 +1,9 @@
+import click
 import os
 import pathlib
-
-import click
 import tomli
 
-from headlight.migrator import create_migration_template, MigrateHooks, Migration, Migrator
+from headlight.migrator import MigrateHooks, Migration, MigrationError, Migrator, create_migration_template
 
 database_help = 'Database connection URL.'
 migrations_help = 'Migrations directory.'
@@ -40,11 +39,23 @@ class LoggingHooks(MigrateHooks):
 
     def on_error(self, migration: Migration, exc: Exception, time_taken: float) -> None:
         click.secho(
-            '\r{status} {filename}'.format(
+            '\r{status} {filename} {time}'.format(
                 status=click.style('Fail'.ljust(10, ' '), fg='red'),
+                time=click.style(f'({time_taken:.3f}s)', fg='cyan'),
                 filename=os.path.basename(migration.file),
             )
         )
+
+
+def colorize_sql(sql: str) -> str:
+    try:
+        import pygments
+        from pygments.formatters import get_formatter_by_name
+        from pygments.lexers import get_lexer_by_name
+
+        return pygments.highlight(sql, get_lexer_by_name('sql'), get_formatter_by_name('terminal'))
+    except ImportError:
+        return sql
 
 
 def get_config_from_pyproject() -> dict[str, str]:
@@ -97,10 +108,12 @@ def upgrade(
 ) -> None:
     _, _, db_name = database.rpartition('/')
     db_type, _, _ = database.partition('://')
-    click.secho('Upgrade {type} database {db}.'.format(
-        db=click.style(db_name, fg='cyan'),
-        type=click.style(db_type, fg='green'),
-    ))
+    click.secho(
+        'Upgrade {type} database {db}.'.format(
+            db=click.style(db_name, fg='cyan'),
+            type=click.style(db_type, fg='green'),
+        )
+    )
 
     migrator = Migrator(database, migrations, table)
     migrator.initialize_db()
@@ -108,17 +121,23 @@ def upgrade(
     if not pending_count:
         return click.echo('No pending migration(s).')
 
-    click.secho('Will apply {count} pending migration(s).'.format(
-        count=click.style(str(pending_count), fg='cyan')
-    ))
+    click.secho('Will apply {count} pending migration(s).'.format(count=click.style(str(pending_count), fg='cyan')))
 
     if not yes:
         click.confirm(
             'Database schema will be {action}. Continue?'.format(action=click.style('upgraded', fg='yellow')),
-            show_default=True, abort=True,
+            show_default=True,
+            abort=True,
         )
 
-    migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
+    try:
+        migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
+    except MigrationError as ex:
+        click.echo('')
+        click.secho('-' * 30 + f' FAIL: {ex.migration.file} ' + '-' * 30, fg='red')
+        click.secho(f'Error: {ex}', fg='red')
+        click.echo('Statement, that caused error:')
+        click.echo(colorize_sql(ex.stmt))
 
 
 @app.command()
@@ -163,12 +182,21 @@ def downgrade(
             'Database schema will be {action} by {steps} step(s). Continue?'.format(
                 action=click.style('downgraded', fg='yellow'),
                 steps=click.style(steps, fg='cyan'),
-            ), show_default=True, abort=True,
+            ),
+            show_default=True,
+            abort=True,
         )
 
     migrator = Migrator(database, migrations, table)
     migrator.initialize_db()
-    migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
+    try:
+        migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
+    except MigrationError as ex:
+        click.echo('')
+        click.secho('-' * 30 + f' FAIL: {ex.migration.file} ' + '-' * 30, fg='red')
+        click.secho(f'Error: {ex}', fg='red')
+        click.echo('Statement, that caused error:')
+        click.echo(colorize_sql(ex.stmt))
 
 
 @app.command

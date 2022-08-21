@@ -45,7 +45,7 @@ class CreateIndexOp(Operation):
         self,
         table: str,
         columns: list[IndexExpr],
-        name: str | None = None,
+        name: str,
         unique: bool = False,
         concurrently: bool = False,
         if_not_exists: bool = False,
@@ -56,11 +56,9 @@ class CreateIndexOp(Operation):
         where: str | None = None,
         tablespace: str | None = None,
     ) -> None:
-        index_name = table + '_' + '_'.join([expr.column for expr in columns]) + '_idx'
-
         self.table = table
         self.columns = columns
-        self.name = name or index_name
+        self.name = name
         self.unique = unique
         self.concurrently = concurrently
         self.if_not_exists = if_not_exists
@@ -129,7 +127,6 @@ class CreateTableOp(Operation):
         self._columns = columns
         self._constraints = constraints or []
         self._indices = indices or []
-        self.extra_ops: list[Operation] = []
 
     def to_up_sql(self, driver: DbDriver) -> str:
         pk_cols = [col for col in self._columns if col.primary_key]
@@ -156,21 +153,6 @@ class CreateTableOp(Operation):
 
         for constraint in self._constraints:
             column_stmts.append('    ' + constraint.compile(driver))
-
-        for index in self._indices:
-            self.extra_ops.append(
-                CreateIndexOp(
-                    table=index.table_name,
-                    columns=index.columns,
-                    name=index.name,
-                    unique=index.unique,
-                    using=index.using,
-                    include=index.include,
-                    with_=index.with_,
-                    where=index.where,
-                    tablespace=index.tablespace,
-                )
-            )
 
         return driver.create_table_template.format(
             name=self._table_name,
@@ -358,7 +340,7 @@ class DropDefaultOp(Operation):
         self,
         table_name: str,
         column_name: str,
-        current_default: str,
+        current_default: str | None = None,
         only: bool = False,
         if_table_exists: bool = False,
     ) -> None:
@@ -377,6 +359,8 @@ class DropDefaultOp(Operation):
         )
 
     def to_down_sql(self, driver: DbDriver) -> str:
+        if self.old_default is None:  # column had no default previously
+            return '-- noop'
         return SetDefaultOp(
             table_name=self.table_name,
             column_name=self.column_name,
