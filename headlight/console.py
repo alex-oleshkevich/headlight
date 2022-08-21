@@ -87,6 +87,7 @@ def app() -> None:
 @click.option('--fake', is_flag=True, default=False, help=fake_help)
 @click.option('--print-sql', is_flag=True, default=False, help=print_help)
 @click.option('--yes', '-y', is_flag=True, default=False, help=yes_help)
+@click.option('--verbose', is_flag=True, default=False)
 def upgrade(
     *,
     database: str,
@@ -96,6 +97,7 @@ def upgrade(
     dry_run: bool,
     print_sql: bool,
     yes: bool,
+    verbose: bool,
 ) -> None:
     _, _, db_name = database.rpartition('/')
     db_type, _, _ = database.partition('://')
@@ -124,6 +126,8 @@ def upgrade(
     try:
         migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
     except MigrationError as ex:
+        if verbose:
+            traceback.print_exception(ex)
         click.echo('')
         click.secho('-' * 30 + f' FAIL: {ex.migration.file} ' + '-' * 30, fg='red')
         click.secho(f'Error: {ex}', fg='red')
