@@ -217,6 +217,18 @@ class CreateIndexOp(Operation):
         return driver.drop_index_template.format(name=self.name)
 
 
+class DropIndexOp(Operation):
+    def __init__(self, name: str, create_index: CreateIndexOp) -> None:
+        self.name = name
+        self.create_index = create_index
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.drop_index_template.format(name=self.name)
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        return self.create_index.to_up_sql(driver)
+
+
 class CreateTableOp(Operation):
     def __init__(
         self,
@@ -351,7 +363,19 @@ class CreateTableOp(Operation):
         )
 
     def to_down_sql(self, driver: DbDriver) -> str:
-        return driver.drop_table_template.format(name=self.table_name)
+        return DropTableOp(name=self.table_name, create_table=self).to_up_sql(driver)
+
+
+class DropTableOp(Operation):
+    def __init__(self, name: str, create_table: CreateTableOp) -> None:
+        self.name = name
+        self.create_table = create_table
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.drop_table_template.format(name=self.name)
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        return self.create_table.to_up_sql(driver)
 
 
 class AddColumnOp(Operation):
