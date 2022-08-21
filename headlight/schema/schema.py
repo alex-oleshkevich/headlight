@@ -1,9 +1,13 @@
 import contextlib
 import typing
 
-from headlight.schema import ops
-from headlight.schema.ops import AddColumnOp, CheckConstraint, ForeignKey, UniqueConstraint
-from headlight.schema.types import Type
+from headlight.schema import ops, types
+
+
+class Table:
+    name: str
+    columns: list[ops.Column] = []
+    constraints: list[ops.Constraint] = []
 
 
 class Schema:
@@ -73,20 +77,20 @@ class Schema:
         self,
         table_name: str,
         column_name: str,
-        type: Type,
+        type: types.Type,
         null: bool = False,
         if_column_not_exists: bool = False,
         if_table_exists: bool = False,
-        unique_constraint: UniqueConstraint | None = None,
-        check_constraint: CheckConstraint | None = None,
+        unique_constraint: ops.UniqueConstraint | None = None,
+        check_constraint: ops.CheckConstraint | None = None,
         collate: str | None = None,
         only: bool = False,
         default: str | None = None,
         primary_key: bool | None = None,
-        foreign_key: ForeignKey | None = None,
+        foreign_key: ops.ForeignKey | None = None,
     ) -> None:
         self.add_op(
-            AddColumnOp(
+            ops.AddColumnOp(
                 table_name=table_name,
                 column_name=column_name,
                 type=type,

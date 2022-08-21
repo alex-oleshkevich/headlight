@@ -9,10 +9,6 @@ from headlight.schema import types
 
 class PgDriver(DbDriver):
     placeholder_mark = '%s'
-    table_template = (
-        'CREATE TABLE IF NOT EXISTS {table} '
-        '(revision TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, applied TEXT NOT NULL)'
-    )
 
     def __init__(self, url: str) -> None:
         self.conn = psycopg2.connect(url)
@@ -56,7 +52,7 @@ class PgDriver(DbDriver):
                 return 'MONEY'
             case types.CharType(length=length):
                 return f'CHAR({length})'
-            case types.StringType(length=length):
+            case types.VarCharType(length=length):
                 return f'VARCHAR({length})' if length else 'VARCHAR'
             case types.TextType():
                 return 'TEXT'

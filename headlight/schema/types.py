@@ -17,7 +17,7 @@ class CharType(Type):
         self.length = length
 
 
-class StringType(Type):
+class VarCharType(Type):
     def __init__(self, length: int | None = None) -> None:
         self.length = length
 

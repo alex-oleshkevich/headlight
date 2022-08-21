@@ -30,7 +30,7 @@ class DbDriver(abc.ABC):
     drop_index_template = 'DROP INDEX {name}'
     index_column_template = '{expr}{collation}{opclass}{opclass_params}{sorting}{nulls}'
     unique_constraint_template = '{constraint}UNIQUE{columns}{include}'
-    primary_key_constraint_template = '{constraint}PRIMARY KEY({columns}){include}'
+    primary_key_constraint_template = '{constraint}PRIMARY KEY ({columns}){include}'
     check_constraint_template = '{constraint}CHECK ({expr})'
     foreign_key_template = '{constraint}{self_columns}{references}{columns}{match}{on_delete}{on_update}'
     add_column_template = (
@@ -61,8 +61,6 @@ class DbDriver(abc.ABC):
         ...
 
     def create_migrations_table(self, table: str) -> None:
-        assert self.table_template
-
         from headlight.schema import ops, types
 
         table_op = ops.CreateTableOp(table_name=table, if_not_exists=True)
@@ -95,7 +93,7 @@ class DbDriver(abc.ABC):
             yield {
                 'revision': row[0],
                 'name': row[1],
-                'applied': datetime.fromisoformat(row[2]),
+                'applied': row[2],
             }
 
     @abc.abstractmethod

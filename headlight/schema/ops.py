@@ -238,10 +238,8 @@ class CreateTableOp(Operation):
         self.table_name = table_name
         self.if_not_exists = if_not_exists
         self.columns: list[Column] = []
-        self.checks: list[CheckConstraint] = []
+        self.constraints: list[Constraint] = []
         self.extra_ops: list[Operation] = []
-        self.unique: UniqueConstraint | None = None
-        self.foreign_keys: list[ForeignKey] = []
 
     def add_column(
         self,
@@ -291,7 +289,7 @@ class CreateTableOp(Operation):
         return column
 
     def add_check_constraint(self, expr: str, name: str | None = None) -> None:
-        self.checks.append(CheckConstraint(expr, name))
+        self.constraints.append(CheckConstraint(expr, name))
 
     def add_unique_constraint(
         self,
@@ -299,7 +297,10 @@ class CreateTableOp(Operation):
         name: str | None = None,
         include: list[str] | None = None,
     ) -> None:
-        self.unique = UniqueConstraint(name=name, include=include, columns=columns)
+        self.constraints.append(UniqueConstraint(name=name, include=include, columns=columns))
+
+    def add_primary_key(self, columns: list[str], name: str | None = None, include: list[str] | None = None) -> None:
+        self.constraints.append(PrimaryKeyConstraint(name=name, columns=columns, include=include))
 
     def add_foreign_key(
         self,
@@ -311,7 +312,7 @@ class CreateTableOp(Operation):
         on_update: Action | None = None,
         match: MatchType | None = None,
     ) -> None:
-        self.foreign_keys.append(
+        self.constraints.append(
             ForeignKey(
                 name=name,
                 match=match,
@@ -343,18 +344,12 @@ class CreateTableOp(Operation):
         ]
 
         if pk_count > 1:
-            column_stmts.append('    PRIMARY KEY (%s)' % ', '.join([col.name for col in pk_cols]))
+            self.constraints.append(PrimaryKeyConstraint(
+                columns=[col.name for col in pk_cols]
+            ))
 
-        if self.checks:
-            for check in self.checks:
-                column_stmts.append(f'    {check.compile(driver)}')
-
-        if self.unique:
-            column_stmts.append(f'    {self.unique.compile(driver)}')
-
-        if self.foreign_keys:
-            for fk in self.foreign_keys:
-                column_stmts.append(f'    {fk.compile(driver)}')
+        for constraint in self.constraints:
+            column_stmts.append('    ' + constraint.compile(driver))
 
         return driver.create_table_template.format(
             name=self.table_name,
