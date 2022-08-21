@@ -32,6 +32,11 @@ class DbDriver(abc.ABC):
     unique_constraint_template = '{constraint}UNIQUE{columns}{include}'
     check_constraint_template = '{constraint}CHECK ({expr})'
     foreign_key_template = '{constraint}{self_columns}{references}{match}{on_delete}{on_update}{columns}'
+    add_column_template = (
+        'ALTER TABLE{if_table_exists}{only} {table} '
+        'ADD{if_column_not_exists} {name} {type}{collate}{check}{unique}{null}{default}{foreign}'
+    )
+    drop_column_template = 'ALTER TABLE{if_table_exists}{only} {table} DROP{if_column_exists} {name}'
 
     @classmethod
     @abc.abstractmethod

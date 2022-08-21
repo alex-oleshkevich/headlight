@@ -1,7 +1,7 @@
 import contextlib
 import typing
 
-from headlight.schema.ops import CreateIndexOp, CreateTableOp, IndexExpr, Operation, RunSqlOp
+from headlight.schema.ops import AlterTableOp, CreateIndexOp, CreateTableOp, IndexExpr, Operation, RunSqlOp
 
 
 class Schema:
@@ -17,6 +17,16 @@ class Schema:
         op = CreateTableOp(table_name, if_not_exists=if_not_exists)
         yield op
         self._ops.extend([op, *op.extra_ops])
+
+    @contextlib.contextmanager  # type: ignore[arg-type]
+    def alter_table(
+        self,
+        table_name: str,
+        if_exists: bool = False,
+    ) -> typing.ContextManager[AlterTableOp]:  # type: ignore[misc]
+        op = AlterTableOp(table_name=table_name)
+        yield op
+        self._ops.extend(op.extra_ops)
 
     def add_index(
         self,
@@ -34,8 +44,17 @@ class Schema:
         tablespace: str | None = None,
     ) -> CreateIndexOp:
         op = CreateIndexOp(
-            table=table, name=name, unique=unique, concurrently=concurrently, if_not_exists=if_not_exists, only=only,
-            using=using, include=include, with_=with_, where=where, tablespace=tablespace,
+            table=table,
+            name=name,
+            unique=unique,
+            concurrently=concurrently,
+            if_not_exists=if_not_exists,
+            only=only,
+            using=using,
+            include=include,
+            with_=with_,
+            where=where,
+            tablespace=tablespace,
             columns=[IndexExpr(column=column) if isinstance(column, str) else column for column in columns],
         )
         self._ops.append(op)
