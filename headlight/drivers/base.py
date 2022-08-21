@@ -37,6 +37,8 @@ class DbDriver(abc.ABC):
         'ADD{if_column_not_exists} {name} {type}{collate}{check}{unique}{null}{default}{foreign}'
     )
     drop_column_template = 'ALTER TABLE{if_table_exists}{only} {table} DROP{if_column_exists} {name}'
+    add_column_default_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} SET DEFAULT {expr}'
+    drop_column_default_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} DROP DEFAULT'
 
     @classmethod
     @abc.abstractmethod

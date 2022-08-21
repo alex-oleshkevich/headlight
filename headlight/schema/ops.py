@@ -452,6 +452,125 @@ class DropColumnOp(Operation):
         return self.create_column.to_up_sql(driver)
 
 
+class SetDefaultOp(Operation):
+    def __init__(
+        self,
+        table_name: str,
+        column_name: str,
+        new_default: str,
+        current_default: str | None = None,
+        only: bool = False,
+        if_table_exists: bool = False,
+    ) -> None:
+        self.only = only
+        self.table_name = table_name
+        self.column_name = column_name
+        self.new_default = new_default
+        self.old_default = current_default
+        self.if_table_exists = if_table_exists
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.add_column_default_template.format(
+            table=self.table_name,
+            name=self.column_name,
+            only=' ONLY' if self.only else '',
+            expr=f"'{self.new_default}'",
+            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
+        )
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        if self.old_default is None:
+            return DropDefaultOp(
+                table_name=self.table_name,
+                column_name=self.column_name,
+                current_default=self.old_default,
+                only=self.only,
+                if_table_exists=self.if_table_exists,
+            ).to_up_sql(driver)
+        return self.__class__(
+            table_name=self.table_name,
+            column_name=self.column_name,
+            new_default=self.old_default,
+            current_default=self.new_default,
+            only=self.only,
+            if_table_exists=self.if_table_exists,
+        ).to_up_sql(driver)
+
+
+class DropDefaultOp(Operation):
+    def __init__(
+        self,
+        table_name: str,
+        column_name: str,
+        current_default: str | None = None,
+        only: bool = False,
+        if_table_exists: bool = False,
+    ) -> None:
+        self.only = only
+        self.table_name = table_name
+        self.column_name = column_name
+        self.old_default = current_default
+        self.if_table_exists = if_table_exists
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.drop_column_default_template.format(
+            table=self.table_name,
+            name=self.column_name,
+            only=' ONLY' if self.only else '',
+            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
+        )
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        return SetDefaultOp(
+            table_name=self.table_name,
+            column_name=self.column_name,
+            new_default=self.old_default,
+            only=self.only,
+            if_table_exists=self.if_table_exists,
+        ).to_up_sql(driver)
+
+
+class ChangeColumn:
+    def __init__(
+        self,
+        ops: list[Operation],
+        table_name: str,
+        column_name: str,
+        only: bool = False,
+        if_table_exists: bool = False,
+    ) -> None:
+        self.only = only
+        self.table_name = table_name
+        self.column_name = column_name
+        self.if_table_exists = if_table_exists
+        self._ops = ops
+
+    def set_default(self, new_default: str, current_default: str | None) -> ChangeColumn:
+        self._ops.append(
+            SetDefaultOp(
+                table_name=self.table_name,
+                column_name=self.column_name,
+                new_default=new_default,
+                current_default=current_default,
+                only=self.only,
+                if_table_exists=self.if_table_exists,
+            )
+        )
+        return self
+
+    def drop_default(self, current_default: str | None) -> ChangeColumn:
+        self._ops.append(
+            DropDefaultOp(
+                table_name=self.table_name,
+                column_name=self.column_name,
+                current_default=current_default,
+                only=self.only,
+                if_table_exists=self.if_table_exists,
+            )
+        )
+        return self
+
+
 class AlterTableOp:
     def __init__(self, table_name: str, if_exists: bool = False, only: bool = False) -> None:
         self.table_name = table_name
@@ -515,4 +634,13 @@ class AlterTableOp:
                 if_table_exists=self.if_exists,
                 if_column_exists=if_column_exists,
             )
+        )
+
+    def alter_column(self, column_name: str) -> ChangeColumn:
+        return ChangeColumn(
+            ops=self.extra_ops,
+            table_name=self.table_name,
+            column_name=column_name,
+            only=self.only,
+            if_table_exists=self.if_exists,
         )
