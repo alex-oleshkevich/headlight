@@ -7,6 +7,7 @@ from types import TracebackType
 
 from headlight.schema import types
 
+
 T = typing.TypeVar('T', bound='DbDriver')
 
 
@@ -62,11 +63,17 @@ class DbDriver(abc.ABC):
 
     def create_migrations_table(self, table: str) -> None:
         from headlight.schema import ops, types
+        from headlight.schema.schema import Column
 
-        table_op = ops.CreateTableOp(table_name=table, if_not_exists=True)
-        table_op.add_column('revision', types.TextType(), primary_key=True)
-        table_op.add_column('name', types.TextType())
-        table_op.add_column('applied', types.DateTimeType())
+        table_op = ops.CreateTableOp(
+            table_name=table,
+            columns=[
+                Column(name='revision', type=types.TextType(), primary_key=True),
+                Column(name='name', type=types.TextType()),
+                Column(name='applied', type=types.DateTimeType()),
+            ],
+            if_not_exists=True,
+        )
 
         self.execute('BEGIN')
         self.execute(table_op.to_up_sql(self))

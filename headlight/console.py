@@ -14,6 +14,7 @@ revert_steps_help = 'The number of migrations to be reverted.'
 fake_help = 'Write history table records without running any SQL command.'
 print_help = 'Print generated SQL to stderr.'
 migration_name_help = 'The name of the migration.'
+yes_help = 'Automatically confirm action.'
 
 DATABASE_ENVVAR = 'HL_DATABASE_URL'
 
@@ -83,6 +84,7 @@ def app() -> None:
 @click.option('--dry-run', is_flag=True, default=False, show_default=True, help=dry_run_help)
 @click.option('--fake', is_flag=True, default=False, help=fake_help)
 @click.option('--print-sql', is_flag=True, default=False, help=print_help)
+@click.option('--yes', '-y', is_flag=True, default=False, help=yes_help)
 def upgrade(
     *,
     database: str,
@@ -91,19 +93,32 @@ def upgrade(
     fake: bool,
     dry_run: bool,
     print_sql: bool,
+    yes: bool,
 ) -> None:
     _, _, db_name = database.rpartition('/')
-    click.secho(
-        'Upgrade database {db}.'.format(
-            db=click.style(db_name, fg='cyan'),
+    db_type, _, _ = database.partition('://')
+    click.secho('Upgrade {type} database {db}.'.format(
+        db=click.style(db_name, fg='cyan'),
+        type=click.style(db_type, fg='green'),
+    ))
+
+    migrator = Migrator(database, migrations, table)
+    migrator.initialize_db()
+    pending_count = len(migrator.get_pending_migrations())
+    if not pending_count:
+        return click.echo('No pending migration(s).')
+
+    click.secho('Will apply {count} pending migration(s).'.format(
+        count=click.style(str(pending_count), fg='cyan')
+    ))
+
+    if not yes:
+        click.confirm(
+            'Database schema will be {action}. Continue?'.format(action=click.style('upgraded', fg='yellow')),
+            show_default=True, abort=True,
         )
-    )
-    try:
-        migrator = Migrator(database, migrations, table)
-        migrator.initialize_db()
-        migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
-    finally:
-        click.echo('Done')
+
+    migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
 
 
 @app.command()
@@ -122,6 +137,7 @@ def upgrade(
 @click.option('--fake', is_flag=True, default=False, help=fake_help)
 @click.option('--steps', type=int, default=1, help=revert_steps_help, show_default=True)
 @click.option('--print-sql', is_flag=True, default=False, help=print_help)
+@click.option('--yes', '-y', is_flag=True, default=False, help=yes_help)
 def downgrade(
     *,
     database: str,
@@ -130,22 +146,29 @@ def downgrade(
     fake: bool,
     dry_run: bool,
     print_sql: bool,
+    yes: bool,
     steps: int,
 ) -> None:
     _, _, db_name = database.rpartition('/')
+    db_type, _, _ = database.partition('://')
     click.secho(
-        'Downgrade database {db} by {steps} steps.'.format(
+        'Downgrade {type} database {db}.'.format(
             db=click.style(db_name, fg='cyan'),
-            steps=click.style(steps, fg='cyan'),
+            type=click.style(db_type, fg='green'),
         )
     )
 
+    if not yes:
+        click.confirm(
+            'Database schema will be {action} by {steps} step(s). Continue?'.format(
+                action=click.style('downgraded', fg='yellow'),
+                steps=click.style(steps, fg='cyan'),
+            ), show_default=True, abort=True,
+        )
+
     migrator = Migrator(database, migrations, table)
     migrator.initialize_db()
-    try:
-        migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
-    finally:
-        click.echo('Done')
+    migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
 
 
 @app.command

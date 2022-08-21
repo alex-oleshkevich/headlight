@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import datetime
 import getpass
 import glob
@@ -10,21 +8,22 @@ import os
 import sys
 import time
 import typing
+from dataclasses import dataclass
 
-from headlight import Schema
 from headlight.database import create_database
 from headlight.drivers.base import AppliedMigration, DummyTransaction
+from headlight.schema.builder import Blueprint
 from headlight.schema.ops import Operation
 
 MIGRATION_TEMPLATE = """
-from headlight import Schema
+from headlight import Blueprint, types
 
 date = "{date}"
 author = "{author}"
 transactional = True
 
 
-def migrate(schema: Schema) -> None:
+def migrate(schema: Blueprint) -> None:
     pass
 
 """
@@ -51,7 +50,7 @@ class Migration:
         revision = filename[:15]
         name, _, _ = filename[16:].rpartition('.')
 
-        schema = Schema()
+        schema = Blueprint()
         mod.migrate(schema)
 
         return Migration(

@@ -9,7 +9,7 @@ from headlight.schema.schema import (
     Column,
     Constraint,
     ForeignKey,
-    IndexExpr,
+    Index, IndexExpr,
     MatchType,
     PrimaryKeyConstraint,
     UniqueConstraint,
@@ -27,7 +27,7 @@ class Operation(abc.ABC):
         raise NotImplementedError()
 
 
-class RunSqlOp(Operation):
+class RunSQLOp(Operation):
     def __init__(self, up_sql: str, down_sql: str) -> None:
         self.up_sql = up_sql
         self.down_sql = down_sql
@@ -118,122 +118,17 @@ class CreateTableOp(Operation):
     def __init__(
         self,
         table_name: str,
+        columns: list[Column],
+        constraints: list[Constraint] | None = None,
+        indices: list[Index] | None = None,
         if_not_exists: bool = False,
     ) -> None:
         self._table_name = table_name
         self._if_not_exists = if_not_exists
-        self._columns: list[Column] = []
-        self._constraints: list[Constraint] = []
+        self._columns = columns
+        self._constraints = constraints or []
+        self._indices = indices or []
         self.extra_ops: list[Operation] = []
-
-    def add_column(
-        self,
-        name: str,
-        type: Type,
-        null: bool = False,
-        default: str | None = None,
-        primary_key: bool = False,
-        auto_increment: bool = False,
-        if_not_exists: bool = False,
-        comment: str | None = None,
-        unique: UniqueConstraint | bool | str | None = None,
-        check: CheckConstraint | str | tuple[str, str] | None = None,
-    ) -> Column:
-        unique_constraint: UniqueConstraint | None = None
-        match unique:
-            case UniqueConstraint():
-                unique_constraint = unique
-            case True:
-                unique_constraint = UniqueConstraint()
-            case constraint_name if isinstance(constraint_name, str):
-                unique_constraint = UniqueConstraint(name=constraint_name)
-
-        check_constraint: CheckConstraint | None = None
-        match check:
-            case CheckConstraint():
-                check_constraint = check
-            case expr if isinstance(expr, str):
-                check_constraint = CheckConstraint(expr=expr)
-            case (constraint_name, expr):
-                check_constraint = CheckConstraint(expr=expr, name=constraint_name)
-
-        column = Column(
-            name=name,
-            type=type,
-            null=null,
-            default=default,
-            primary_key=primary_key,
-            auto_increment=auto_increment,
-            if_not_exists=if_not_exists,
-            comment=comment,
-            unique_constraint=unique_constraint,
-            check_constraint=check_constraint,
-        )
-
-        self._columns.append(column)
-        return column
-
-    def add_index(
-        self,
-        columns: list[str],
-        name: str | None = None,
-        unique: bool = False,
-        using: str | None = None,
-        include: list[str] | None = None,
-        with_: str | None = None,
-        where: str | None = None,
-        tablespace: str | None = None,
-    ) -> None:
-        index_exprs = [IndexExpr(column) if isinstance(column, str) else column for column in columns]
-        self.extra_ops.append(
-            CreateIndexOp(
-                table=self._table_name,
-                columns=index_exprs,
-                name=name,
-                unique=unique,
-                using=using,
-                include=include,
-                with_=with_,
-                where=where,
-                tablespace=tablespace,
-            )
-        )
-
-    def add_check_constraint(self, expr: str, name: str | None = None) -> None:
-        self._constraints.append(CheckConstraint(expr, name))
-
-    def add_unique_constraint(
-        self,
-        columns: list[str],
-        name: str | None = None,
-        include: list[str] | None = None,
-    ) -> None:
-        self._constraints.append(UniqueConstraint(name=name, include=include, columns=columns))
-
-    def add_primary_key(self, columns: list[str], name: str | None = None, include: list[str] | None = None) -> None:
-        self._constraints.append(PrimaryKeyConstraint(name=name, columns=columns, include=include))
-
-    def add_foreign_key(
-        self,
-        columns: list[str],
-        target_table: str,
-        target_columns: list[str] | None = None,
-        name: str | None = None,
-        on_delete: Action | None = None,
-        on_update: Action | None = None,
-        match: MatchType | None = None,
-    ) -> None:
-        self._constraints.append(
-            ForeignKey(
-                name=name,
-                match=match,
-                on_delete=on_delete,
-                on_update=on_update,
-                self_columns=columns,
-                target_table=target_table,
-                target_columns=target_columns,
-            )
-        )
 
     def to_up_sql(self, driver: DbDriver) -> str:
         pk_cols = [col for col in self._columns if col.primary_key]
@@ -259,6 +154,13 @@ class CreateTableOp(Operation):
 
         for constraint in self._constraints:
             column_stmts.append('    ' + constraint.compile(driver))
+
+        for index in self._indices:
+            self.extra_ops.append(CreateIndexOp(
+                table=index.table_name, columns=index.columns, name=index.name,
+                unique=index.unique, using=index.using, include=index.include, with_=index.with_,
+                where=index.where, tablespace=index.tablespace,
+            ))
 
         return driver.create_table_template.format(
             name=self._table_name,
@@ -581,93 +483,6 @@ class ChangeTypeOp(Operation):
         )
 
 
-class ChangeColumn:
-    def __init__(
-        self,
-        ops: list[Operation],
-        table_name: str,
-        column_name: str,
-        only: bool = False,
-        if_table_exists: bool = False,
-    ) -> None:
-        self._only = only
-        self._table_name = table_name
-        self._column_name = column_name
-        self._if_table_exists = if_table_exists
-        self._ops = ops
-
-    def set_default(self, new_default: str, current_default: str | None) -> ChangeColumn:
-        self._ops.append(
-            SetDefaultOp(
-                table_name=self._table_name,
-                column_name=self._column_name,
-                new_default=new_default,
-                current_default=current_default,
-                only=self._only,
-                if_table_exists=self._if_table_exists,
-            )
-        )
-        return self
-
-    def drop_default(self, current_default: str | None) -> ChangeColumn:
-        self._ops.append(
-            DropDefaultOp(
-                table_name=self._table_name,
-                column_name=self._column_name,
-                current_default=current_default,
-                only=self._only,
-                if_table_exists=self._if_table_exists,
-            )
-        )
-        return self
-
-    def set_nullable(self, flag: bool) -> ChangeColumn:
-        if flag:
-            self._ops.append(
-                DropNullOp(
-                    table_name=self._table_name,
-                    column_name=self._column_name,
-                    only=self._only,
-                    if_table_exists=self._if_table_exists,
-                )
-            )
-        else:
-            self._ops.append(
-                SetNullOp(
-                    table_name=self._table_name,
-                    column_name=self._column_name,
-                    only=self._only,
-                    if_table_exists=self._if_table_exists,
-                )
-            )
-        return self
-
-    def change_type(
-        self,
-        new_type: Type,
-        current_type: Type,
-        collation: str | None = None,
-        current_collation: str | None = None,
-        using: str | None = None,
-        current_using: str | None = None,
-    ) -> ChangeColumn:
-        self._ops.append(
-            ChangeTypeOp(
-                table_name=self._table_name,
-                column_name=self._column_name,
-                new_type=new_type,
-                current_type=current_type,
-                only=self._only,
-                if_table_exists=self._if_table_exists,
-                collation=collation,
-                current_collation=current_collation,
-                using=using,
-                current_using=current_using,
-            )
-        )
-        return self
-
-
 class AddTableConstraintOp(Operation):
     def __init__(
         self,
@@ -732,137 +547,3 @@ class DropTableConstraintOp(Operation):
             only=self.only,
             if_table_exists=self.if_table_exists,
         ).to_up_sql(driver)
-
-
-class AlterTableOp:
-    def __init__(self, table_name: str, if_exists: bool = False, only: bool = False) -> None:
-        self._table_name = table_name
-        self._if_exists = if_exists
-        self._only = only
-        self.extra_ops: list[Operation] = []
-
-    def add_column(
-        self,
-        name: str,
-        type: Type,
-        null: bool = False,
-        primary_key: bool | None = None,
-        default: str | None = None,
-        unique: bool | UniqueConstraint | None = None,
-        check: CheckConstraint | None = None,
-        if_table_exists: bool = False,
-        if_column_not_exists: bool = False,
-        collate: str | None = None,
-    ) -> AddColumnOp:
-        unique_constraint: UniqueConstraint | None = None
-        match unique:
-            case UniqueConstraint():
-                unique_constraint = unique
-            case True:
-                unique_constraint = UniqueConstraint()
-            case constraint_name if isinstance(constraint_name, str):
-                unique_constraint = UniqueConstraint(name=constraint_name)
-
-        check_constraint: CheckConstraint | None = None
-        match check:
-            case CheckConstraint():
-                check_constraint = check
-            case expr if isinstance(expr, str):
-                check_constraint = CheckConstraint(expr=expr)
-            case (constraint_name, expr):
-                check_constraint = CheckConstraint(expr=expr, name=constraint_name)
-
-        op = AddColumnOp(
-            table_name=self._table_name,
-            column_name=name,
-            type=type,
-            if_table_exists=if_table_exists,
-            unique_constraint=unique_constraint,
-            check_constraint=check_constraint,
-            collate=collate,
-            only=self._only,
-            null=null,
-            default=default,
-            primary_key=primary_key,
-            if_column_not_exists=if_column_not_exists,
-        )
-        self.extra_ops.append(op)
-        return op
-
-    def drop_column(self, name: str, create_column: AddColumnOp, if_column_exists: bool = False) -> None:
-        self.extra_ops.append(
-            DropColumnOp(
-                only=self._only,
-                column_name=name,
-                table_name=self._table_name,
-                create_column=create_column,
-                if_table_exists=self._if_exists,
-                if_column_exists=if_column_exists,
-            )
-        )
-
-    def alter_column(self, column_name: str) -> ChangeColumn:
-        return ChangeColumn(
-            ops=self.extra_ops,
-            table_name=self._table_name,
-            column_name=column_name,
-            only=self._only,
-            if_table_exists=self._if_exists,
-        )
-
-    def add_check_constraint(self, name: str, expr: str) -> None:
-        self.extra_ops.append(
-            AddTableConstraintOp(
-                constraint=CheckConstraint(expr, name),
-                table_name=self._table_name,
-                only=self._only,
-                if_table_exists=self._if_exists,
-            )
-        )
-
-    def add_unique_constraint(self, name: str, columns: list[str], include: list[str] | None = None) -> None:
-        self.extra_ops.append(
-            AddTableConstraintOp(
-                constraint=UniqueConstraint(name=name, include=include, columns=columns),
-                table_name=self._table_name,
-                only=self._only,
-                if_table_exists=self._if_exists,
-            )
-        )
-
-    def add_primary_key(self, name: str, columns: list[str], include: list[str] | None = None) -> None:
-        self.extra_ops.append(
-            AddTableConstraintOp(
-                constraint=PrimaryKeyConstraint(name=name, columns=columns, include=include),
-                table_name=self._table_name,
-                only=self._only,
-                if_table_exists=self._if_exists,
-            )
-        )
-
-    def add_foreign_key(
-        self,
-        name: str,
-        target_table: str,
-        target_columns: list[str] | None = None,
-        self_columns: list[str] | None = None,
-        on_delete: Action | None = None,
-        on_update: Action | None = None,
-        match: MatchType | None = None,
-    ) -> None:
-        self.extra_ops.append(
-            AddTableConstraintOp(
-                constraint=ForeignKey(
-                    name=name,
-                    target_table=target_table,
-                    target_columns=target_columns,
-                    self_columns=self_columns,
-                    on_delete=on_delete,
-                    on_update=on_update,
-                    match=match,
-                ),
-                table_name=self._table_name,
-                only=self._only,
-                if_table_exists=self._if_exists,
-            )
-        )
