@@ -62,8 +62,16 @@ class DbDriver(abc.ABC):
 
     def create_migrations_table(self, table: str) -> None:
         assert self.table_template
+
+        from headlight.schema import ops, types
+
+        table_op = ops.CreateTableOp(table_name=table, if_not_exists=True)
+        table_op.add_column('revision', types.TextType(), primary_key=True)
+        table_op.add_column('name', types.TextType())
+        table_op.add_column('applied', types.DateTimeType())
+
         self.execute('BEGIN')
-        self.execute(self.table_template.format(table=table))
+        self.execute(table_op.to_up_sql(self))
         self.execute('COMMIT')
 
     def transaction(self) -> Transaction:

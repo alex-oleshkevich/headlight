@@ -347,7 +347,7 @@ class CreateTableOp(Operation):
         return driver.create_table_template.format(
             name=self.table_name,
             column_sql='\n' + ',\n'.join(column_stmts) + '\n',
-            if_not_exists=' IF NOT EXISTS' if self.if_not_exists else ' ',
+            if_not_exists=' IF NOT EXISTS ' if self.if_not_exists else ' ',
         )
 
     def to_down_sql(self, driver: DbDriver) -> str:
