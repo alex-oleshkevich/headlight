@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "headlight"
 description = "A database migration toolkit."
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Alex Oleshkevich <alex.oleshkevich@gmail.com>"]
 license = "MIT"
 readme = "README.md"

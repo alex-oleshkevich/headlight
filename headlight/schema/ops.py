@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import typing
 
 from headlight.drivers.base import DbDriver
 from headlight.schema.schema import (
@@ -8,11 +9,14 @@ from headlight.schema.schema import (
     CheckConstraint,
     Column,
     Constraint,
+    DropMode,
     ForeignKey,
+    Generated,
     Index,
     IndexExpr,
     MatchType,
     PrimaryKeyConstraint,
+    Table,
     UniqueConstraint,
 )
 from headlight.schema.types import Type
@@ -102,15 +106,26 @@ class CreateIndexOp(Operation):
 
 
 class DropIndexOp(Operation):
-    def __init__(self, name: str, create_index: CreateIndexOp) -> None:
+    def __init__(self, name: str, current_index: Index, mode: DropMode | None = None) -> None:
         self.name = name
-        self.create_index = create_index
+        self.mode = mode
+        self.old_index = current_index
 
     def to_up_sql(self, driver: DbDriver) -> str:
-        return driver.drop_index_template.format(name=self.name)
+        return driver.drop_index_template.format(name=self.name, mode=f' {self.mode}' if self.mode else '')
 
     def to_down_sql(self, driver: DbDriver) -> str:
-        return self.create_index.to_up_sql(driver)
+        return CreateIndexOp(
+            table=self.old_index.table_name,
+            columns=self.old_index.columns,
+            name=self.name,
+            unique=self.old_index.unique,
+            using=self.old_index.using,
+            include=self.old_index.include,
+            with_=self.old_index.with_,
+            where=self.old_index.where,
+            tablespace=self.old_index.tablespace,
+        ).to_up_sql(driver)
 
 
 class CreateTableOp(Operation):
@@ -161,19 +176,33 @@ class CreateTableOp(Operation):
         )
 
     def to_down_sql(self, driver: DbDriver) -> str:
-        return DropTableOp(name=self._table_name, create_table=self).to_up_sql(driver)
+        return DropTableOp(
+            name=self._table_name,
+            current_table=Table(
+                name=self._table_name,
+                columns=self._columns,
+                constraints=self._constraints,
+                indices=self._indices,
+            ),
+        ).to_up_sql(driver)
 
 
 class DropTableOp(Operation):
-    def __init__(self, name: str, create_table: CreateTableOp) -> None:
+    def __init__(self, name: str, current_table: Table, mode: DropMode | None = None) -> None:
         self.name = name
-        self.create_table = create_table
+        self.mode = mode
+        self.current_table = current_table
 
     def to_up_sql(self, driver: DbDriver) -> str:
-        return driver.drop_table_template.format(name=self.name)
+        return driver.drop_table_template.format(name=self.name, mode=f' {self.mode}' if self.mode else '')
 
     def to_down_sql(self, driver: DbDriver) -> str:
-        return self.create_table.to_up_sql(driver)
+        return CreateTableOp(
+            table_name=self.name,
+            columns=self.current_table.columns,
+            constraints=self.current_table.constraints,
+            indices=self.current_table.indices,
+        ).to_up_sql(driver)
 
 
 class AddColumnOp(Operation):
@@ -192,6 +221,7 @@ class AddColumnOp(Operation):
         default: str | None = None,
         primary_key: bool | None = None,
         foreign_key: ForeignKey | None = None,
+        generated_as: Generated | str | None = None,
     ) -> None:
         self.type = type
         self.only = only
@@ -206,6 +236,11 @@ class AddColumnOp(Operation):
         self.check_constraint = check_constraint
         self.unique_constraint = unique_constraint
         self.if_column_not_exists = if_column_not_exists
+        self.generated_as = (
+            Generated(expr=generated_as, stored=True)
+            if generated_as and isinstance(generated_as, str)
+            else typing.cast(Generated | None, generated_as)
+        )
 
     def check(self, expr: str, name: str | None = None) -> AddColumnOp:
         self.check_constraint = CheckConstraint(expr, name)
@@ -256,7 +291,18 @@ class AddColumnOp(Operation):
             if_column_exists=True,
             table_name=self.table_name,
             column_name=self.column_name,
-            create_column=self,
+            current_column=Column(
+                name=self.column_name,
+                type=self.type,
+                null=self.null,
+                default=self.default,
+                primary_key=self.primary_key or False,
+                collate=self.collate,
+                unique_constraint=self.unique_constraint,
+                check_constraint=self.check_constraint,
+                foreign_key=self.foreign_key,
+                generated_as_=self.generated_as,
+            ),
         ).to_up_sql(driver)
 
 
@@ -265,29 +311,45 @@ class DropColumnOp(Operation):
         self,
         table_name: str,
         column_name: str,
-        create_column: AddColumnOp,
+        current_column: Column,
         if_table_exists: bool = False,
         if_column_exists: bool = False,
         only: bool = False,
+        mode: DropMode | None = None,
     ) -> None:
         self.only = only
+        self.mode = mode
         self.table_name = table_name
         self.column_name = column_name
+        self.old_column = current_column
         self.if_table_exists = if_table_exists
         self.if_column_exists = if_column_exists
-        self.create_column = create_column
 
     def to_up_sql(self, driver: DbDriver) -> str:
         return driver.drop_column_template.format(
             table=self.table_name,
             name=self.column_name,
+            mode=f' {self.mode}' if self.mode else '',
             only=' ONLY' if self.only else '',
             if_table_exists=' IF EXISTS' if self.if_table_exists else '',
             if_column_exists=' IF EXISTS' if self.if_column_exists else '',
         )
 
     def to_down_sql(self, driver: DbDriver) -> str:
-        return self.create_column.to_up_sql(driver)
+        return AddColumnOp(
+            table_name=self.table_name,
+            column_name=self.column_name,
+            type=self.old_column.type,
+            if_table_exists=True,
+            check_constraint=self.old_column.check_constraint,
+            unique_constraint=self.old_column.unique_constraint,
+            collate=self.old_column.collate,
+            only=self.only,
+            null=self.old_column.null,
+            default=self.old_column.default,
+            primary_key=self.old_column.primary_key,
+            foreign_key=self.old_column.foreign_key,
+        ).to_up_sql(driver)
 
 
 class SetDefaultOp(Operation):
@@ -516,10 +578,12 @@ class DropTableConstraintOp(Operation):
         table_name: str,
         current_constraint: Constraint,
         only: bool = False,
+        mode: DropMode | None = None,
         if_exists: bool = False,
         if_table_exists: bool = False,
     ) -> None:
         self.only = only
+        self.mode = mode
         self.if_exists = if_exists
         self.table_name = table_name
         self.constraint_name = constraint_name
@@ -531,6 +595,7 @@ class DropTableConstraintOp(Operation):
             table=self.table_name,
             name=self.constraint_name,
             only=' ONLY' if self.only else '',
+            mode=f' {self.mode}' if self.mode else '',
             if_exists=' IF EXISTS' if self.if_exists else '',
             if_table_exists=' IF EXISTS' if self.if_table_exists else '',
         )

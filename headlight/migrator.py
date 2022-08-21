@@ -153,7 +153,7 @@ class Migrator:
         hooks = hooks or MigrateHooks()
         current_stmt = ''
         try:
-            with tx:
+            with tx, self.db.lock(self.table):
                 hooks.before_migrate(migration)
                 stmts = [(op.to_up_sql(self.db) if upgrade else op.to_down_sql(self.db)) for op in migration.ops]
                 if not upgrade:

@@ -9,6 +9,7 @@ from headlight.schema import types
 
 Action = typing.Literal['RESTRICT', 'CASCADE', 'NO ACTION', 'SET NULL', 'SET DEFAULT']
 MatchType = typing.Literal['FULL', 'PARTIAL', 'SIMPLE']
+DropMode = typing.Literal['RESTRICT', 'CASCADE']
 
 
 @dataclasses.dataclass
@@ -110,6 +111,7 @@ class Column:
     default: str | None = None
     primary_key: bool = False
     if_not_exists: bool = False
+    collate: str | None = None
     unique_constraint: UniqueConstraint | None = None
     check_constraint: CheckConstraint | None = None
     foreign_key: ForeignKey | None = None
@@ -149,13 +151,13 @@ class Column:
 class Index:
     name: str
     table_name: str
-    unique: bool
-    using: str
     columns: list[IndexExpr]
-    include: list[str]
-    with_: str
-    tablespace: str
-    where: str
+    unique: bool = False
+    using: str | None = None
+    include: list[str] | None = None
+    with_: str | None = None
+    tablespace: str | None = None
+    where: str | None = None
 
 
 @dataclasses.dataclass

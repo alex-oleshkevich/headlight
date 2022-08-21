@@ -199,7 +199,7 @@ def downgrade(
     required=True,
     help=migrations_help,
 )
-@click.option('--name', help=migration_name_help)
+@click.argument('name', default='unnamed')
 def new(
     *,
     migrations: str,

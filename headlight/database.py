@@ -5,12 +5,11 @@ from urllib.parse import urlparse
 
 from headlight.drivers.base import DbDriver
 from headlight.drivers.postgresql import PgDriver
-from headlight.drivers.sqlite import SqliteDriver
 from headlight.exceptions import HeadlightError
 
 drivers: dict[str, typing.Type[DbDriver]] = {
     'postgresql': PgDriver,
-    'sqlite': SqliteDriver,
+    'postgres': PgDriver,
 }
 
 

@@ -11,12 +11,14 @@ from headlight.schema.schema import (
     CheckConstraint,
     Column,
     Constraint,
+    DropMode,
     ForeignKey,
     Generated,
     Index,
     IndexExpr,
     MatchType,
     PrimaryKeyConstraint,
+    Table,
     UniqueConstraint,
 )
 
@@ -311,13 +313,20 @@ class AlterTableBuilder:
         self.ops.append(op)
         return op
 
-    def drop_column(self, name: str, create_column: ops.AddColumnOp, if_column_exists: bool = False) -> None:
+    def drop_column(
+        self,
+        name: str,
+        current_column: Column,
+        if_column_exists: bool = False,
+        mode: DropMode | None = None,
+    ) -> None:
         self.ops.append(
             ops.DropColumnOp(
+                mode=mode,
                 only=self._only,
                 column_name=name,
                 table_name=self._table_name,
-                create_column=create_column,
+                current_column=current_column,
                 if_table_exists=self._if_exists,
                 if_column_exists=if_column_exists,
             )
@@ -389,6 +398,25 @@ class AlterTableBuilder:
             )
         )
 
+    def drop_constraint(
+        self,
+        constraint_name: str,
+        current_constraint: Constraint,
+        if_exists: bool = False,
+        mode: DropMode | None = None,
+    ) -> None:
+        self.ops.append(
+            ops.DropTableConstraintOp(
+                mode=mode,
+                if_exists=if_exists,
+                table_name=self._table_name,
+                constraint_name=constraint_name,
+                current_constraint=current_constraint,
+                only=self._only,
+                if_table_exists=self._if_exists,
+            )
+        )
+
 
 class Blueprint:
     def __init__(self) -> None:
@@ -437,8 +465,17 @@ class Blueprint:
         yield builder
         self._ops.extend(builder.ops)
 
-    def drop_table(self, table_name: str, create_table: ops.CreateTableOp) -> None:
-        self.add_op(ops.DropTableOp(name=table_name, create_table=create_table))
+    def drop_table(self, table_name: str, current_table: Table, mode: DropMode | None = None) -> None:
+        self.add_op(ops.DropTableOp(name=table_name, mode=mode, current_table=current_table))
+
+    def drop_index(self, index_name: str, current_index: Index, mode: DropMode | None = None) -> None:
+        self._ops.append(
+            ops.DropIndexOp(
+                mode=mode,
+                name=index_name,
+                current_index=current_index,
+            )
+        )
 
     def run_sql(self, up_sql: str, down_sql: str) -> None:
         self.add_op(ops.RunSQLOp(up_sql, down_sql))

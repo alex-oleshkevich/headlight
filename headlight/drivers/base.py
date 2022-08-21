@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import contextlib
 import typing
 from datetime import datetime
 from types import TracebackType
@@ -21,13 +22,13 @@ class DbDriver(abc.ABC):
     placeholder_mark = '?'
 
     create_table_template = 'CREATE TABLE{if_not_exists}{name} ({column_sql})'
-    drop_table_template = 'DROP TABLE {name}'
+    drop_table_template = 'DROP TABLE {name}{mode}'
     column_template = '{name} {type}{primary_key}{check}{unique}{null}{default}{foreign}{generated_as}'
     create_index_template = (
         'CREATE{unique} INDEX{concurrently}{if_not_exists}{name} ON{only} {table}{using} ({columns})'
         '{include}{with_}{tablespace}{where}'
     )
-    drop_index_template = 'DROP INDEX {name}'
+    drop_index_template = 'DROP INDEX {name}{mode}'
     index_column_template = '{expr}{collation}{opclass}{opclass_params}{sorting}{nulls}'
     unique_constraint_template = '{constraint}UNIQUE{columns}{include}'
     primary_key_constraint_template = '{constraint}PRIMARY KEY ({columns}){include}'
@@ -37,7 +38,7 @@ class DbDriver(abc.ABC):
         'ALTER TABLE{if_table_exists}{only} {table} '
         'ADD{if_column_not_exists} {name} {type}{pk}{collate}{check}{unique}{null}{default}{foreign}'
     )
-    drop_column_template = 'ALTER TABLE{if_table_exists}{only} {table} DROP{if_column_exists} {name}'
+    drop_column_template = 'ALTER TABLE{if_table_exists}{only} {table} DROP{if_column_exists} {name}{mode}'
     add_column_default_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} SET DEFAULT {expr}'
     drop_column_default_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} DROP DEFAULT'
 
@@ -45,7 +46,9 @@ class DbDriver(abc.ABC):
     drop_column_null_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} DROP NOT NULL'
     change_column_type = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} TYPE {type}{collate}{using}'
     add_table_check_template = 'ALTER TABLE{if_table_exists}{only} {table} ADD {constraint}'
-    drop_table_constraint_template = 'ALTER TABLE{if_table_exists}{only} {table} DROP CONSTRAINT{if_exists} {name}'
+    drop_table_constraint_template = (
+        'ALTER TABLE{if_table_exists}{only} {table} DROP CONSTRAINT{if_exists} {name}{mode}'
+    )
     generated_as_template = 'GENERATED ALWAYS AS ({expr}) {stored}'
 
     @classmethod
@@ -81,6 +84,11 @@ class DbDriver(abc.ABC):
 
     def transaction(self) -> Transaction:
         return Transaction(self)
+
+    @contextlib.contextmanager
+    def lock(self, table: str) -> typing.Iterator[None]:
+        self.execute(f'LOCK {table} IN EXCLUSIVE MODE')
+        yield
 
     def add_applied_migration(self, table: str, revision: str, name: str) -> None:
         self.execute(
