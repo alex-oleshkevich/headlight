@@ -590,6 +590,54 @@ class DropNullOp(Operation):
         ).to_up_sql(driver)
 
 
+class ChangeTypeOp(Operation):
+    def __init__(
+        self,
+        table_name: str,
+        column_name: str,
+        new_type: Type,
+        current_type: Type,
+        only: bool = False,
+        if_table_exists: bool = False,
+        collation: str | None = None,
+        using: str | None = None,
+        current_collation: str | None = None,
+        current_using: str | None = None,
+    ) -> None:
+        self.only = only
+        self.new_type = new_type
+        self.old_type = current_type
+        self.table_name = table_name
+        self.column_name = column_name
+        self.if_table_exists = if_table_exists
+        self.collation = collation
+        self.using = using
+        self.old_collation = current_collation
+        self.old_using = current_using
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.change_column_type.format(
+            table=self.table_name,
+            name=self.column_name,
+            type=driver.get_sql_for_type(self.new_type),
+            collate=f" COLLATE {self.collation}" if self.collation else '',
+            using=f" USING {self.using}" if self.using else '',
+            only=' ONLY' if self.only else '',
+            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
+        )
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        return driver.change_column_type.format(
+            table=self.table_name,
+            name=self.column_name,
+            type=driver.get_sql_for_type(self.old_type),
+            collate=f" COLLATE {self.old_collation}" if self.old_collation else '',
+            using=f" USING {self.old_using}" if self.old_using else '',
+            only=' ONLY' if self.only else '',
+            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
+        )
+
+
 class ChangeColumn:
     def __init__(
         self,
@@ -649,6 +697,31 @@ class ChangeColumn:
                     if_table_exists=self.if_table_exists,
                 )
             )
+        return self
+
+    def change_type(
+        self,
+        new_type: Type,
+        current_type: Type,
+        collation: str | None = None,
+        current_collation: str | None = None,
+        using: str | None = None,
+        current_using: str | None = None,
+    ) -> ChangeColumn:
+        self._ops.append(
+            ChangeTypeOp(
+                table_name=self.table_name,
+                column_name=self.column_name,
+                new_type=new_type,
+                current_type=current_type,
+                only=self.only,
+                if_table_exists=self.if_table_exists,
+                collation=collation,
+                current_collation=current_collation,
+                using=using,
+                current_using=current_using,
+            )
+        )
         return self
 
 
