@@ -1,7 +1,10 @@
-import click
 import os
+import pathlib
 
-from headlight.migrator import MigrateHooks, Migration, Migrator, create_migration_template
+import click
+import tomli
+
+from headlight.migrator import create_migration_template, MigrateHooks, Migration, Migrator
 
 database_help = 'Database connection URL.'
 migrations_help = 'Migrations directory.'
@@ -43,23 +46,41 @@ class LoggingHooks(MigrateHooks):
         )
 
 
+def get_config_from_pyproject() -> dict[str, str]:
+    for dir in pathlib.Path(__file__).parents:
+        pyproject = dir / 'pyproject.toml'
+        if pyproject.exists():
+            config = tomli.loads(pyproject.read_text())
+            return config.get('tool', {}).get('headlight', {})
+    return {}
+
+
+config = get_config_from_pyproject()
+default_dir = config.get('directory', 'migrations')
+default_table = config.get('table', 'migrations')
+default_db = config.get('database_url')
+if default_db is not None and default_db.startswith('$'):
+    default_db = os.environ.get(default_db[1:].strip())
+
+
 @click.group()
 def app() -> None:
     pass
 
 
 @app.command()
-@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR)
+@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
 @click.option(
     '-m',
     '--migrations',
-    default='migrations',
+    default=default_dir,
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
     show_default=True,
+    required=True,
     help=migrations_help,
 )
+@click.option('--table', default=default_table, show_default=True, help=table_help, required=True)
 @click.option('--dry-run', is_flag=True, default=False, show_default=True, help=dry_run_help)
-@click.option('--table', default='migrations', show_default=True, help=table_help)
 @click.option('--fake', is_flag=True, default=False, help=fake_help)
 @click.option('--print-sql', is_flag=True, default=False, help=print_help)
 def upgrade(
@@ -81,24 +102,23 @@ def upgrade(
         migrator = Migrator(database, migrations, table)
         migrator.initialize_db()
         migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
-    except Exception as ex:
-        raise ex from None
     finally:
         click.echo('Done')
 
 
 @app.command()
-@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR)
+@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
 @click.option(
     '-m',
     '--migrations',
-    default='migrations',
+    default=default_dir,
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
     show_default=True,
+    required=True,
     help=migrations_help,
 )
+@click.option('--table', default=default_table, show_default=True, help=table_help, required=True)
 @click.option('--dry-run', is_flag=True, default=False, show_default=True, help=dry_run_help)
-@click.option('--table', default='migrations', show_default=True, help=table_help)
 @click.option('--fake', is_flag=True, default=False, help=fake_help)
 @click.option('--steps', type=int, default=1, help=revert_steps_help, show_default=True)
 @click.option('--print-sql', is_flag=True, default=False, help=print_help)
@@ -124,8 +144,6 @@ def downgrade(
     migrator.initialize_db()
     try:
         migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
-    except Exception as ex:
-        raise ex from None
     finally:
         click.echo('Done')
 
@@ -134,9 +152,10 @@ def downgrade(
 @click.option(
     '-m',
     '--migrations',
-    default='migrations',
+    default=default_dir,
     type=click.Path(file_okay=False, dir_okay=True),
     show_default=True,
+    required=True,
     help=migrations_help,
 )
 @click.option('--name', help=migration_name_help)
@@ -154,13 +173,14 @@ def new(
 @click.option(
     '-m',
     '--migrations',
-    default='migrations',
+    default=default_dir,
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
     show_default=True,
+    required=True,
     help=migrations_help,
 )
-@click.option('--table', default='migrations', show_default=True, help=table_help)
-@click.option('-d', '--database', help=database_help, envvar='HL_DATABASE_URL')
+@click.option('--table', default=default_table, show_default=True, help=table_help, required=True)
+@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
 def status(
     *,
     database: str,
