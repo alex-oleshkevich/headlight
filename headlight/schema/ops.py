@@ -9,7 +9,8 @@ from headlight.schema.schema import (
     Column,
     Constraint,
     ForeignKey,
-    Index, IndexExpr,
+    Index,
+    IndexExpr,
     MatchType,
     PrimaryKeyConstraint,
     UniqueConstraint,
@@ -145,6 +146,7 @@ class CreateTableOp(Operation):
                 primary_key=' PRIMARY KEY' if pk_count == 1 and column.primary_key else '',
                 foreign=f' {column.foreign_key.compile(driver)}' if column.foreign_key else '',
                 unique=f' {column.unique_constraint.compile(driver)}' if column.unique_constraint else '',
+                generated_as=f' {column.generated_as_.compile(driver)}' if column.generated_as_ else '',
             )
             for column in self._columns
         ]
@@ -156,11 +158,19 @@ class CreateTableOp(Operation):
             column_stmts.append('    ' + constraint.compile(driver))
 
         for index in self._indices:
-            self.extra_ops.append(CreateIndexOp(
-                table=index.table_name, columns=index.columns, name=index.name,
-                unique=index.unique, using=index.using, include=index.include, with_=index.with_,
-                where=index.where, tablespace=index.tablespace,
-            ))
+            self.extra_ops.append(
+                CreateIndexOp(
+                    table=index.table_name,
+                    columns=index.columns,
+                    name=index.name,
+                    unique=index.unique,
+                    using=index.using,
+                    include=index.include,
+                    with_=index.with_,
+                    where=index.where,
+                    tablespace=index.tablespace,
+                )
+            )
 
         return driver.create_table_template.format(
             name=self._table_name,
@@ -264,6 +274,7 @@ class AddColumnOp(Operation):
             if_column_exists=True,
             table_name=self.table_name,
             column_name=self.column_name,
+            create_column=self,
         ).to_up_sql(driver)
 
 
@@ -272,10 +283,10 @@ class DropColumnOp(Operation):
         self,
         table_name: str,
         column_name: str,
+        create_column: AddColumnOp,
         if_table_exists: bool = False,
         if_column_exists: bool = False,
         only: bool = False,
-        create_column: AddColumnOp | None = None,
     ) -> None:
         self.only = only
         self.table_name = table_name
@@ -347,7 +358,7 @@ class DropDefaultOp(Operation):
         self,
         table_name: str,
         column_name: str,
-        current_default: str | None = None,
+        current_default: str,
         only: bool = False,
         if_table_exists: bool = False,
     ) -> None:
@@ -519,10 +530,10 @@ class DropTableConstraintOp(Operation):
         self,
         constraint_name: str,
         table_name: str,
+        current_constraint: Constraint,
         only: bool = False,
         if_exists: bool = False,
         if_table_exists: bool = False,
-        current_constraint: Constraint | None = None,
     ) -> None:
         self.only = only
         self.if_exists = if_exists

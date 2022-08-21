@@ -56,8 +56,8 @@ class UniqueConstraint(Constraint):
 
 @dataclasses.dataclass
 class PrimaryKeyConstraint(Constraint):
-    name: str | None
     columns: list[str]
+    name: str | None = None
     include: list[str] = dataclasses.field(default_factory=list)
 
     def compile(self, driver: DbDriver) -> str:
@@ -91,18 +91,29 @@ class ForeignKey(Constraint):
 
 
 @dataclasses.dataclass
+class Generated:
+    expr: str
+    stored: bool = False
+
+    def compile(self, driver: DbDriver) -> str:
+        return driver.generated_as_template.format(
+            expr=self.expr,
+            stored='STORED' if self.stored else '',
+        )
+
+
+@dataclasses.dataclass
 class Column:
     name: str
     type: types.Type
     null: bool = False
     default: str | None = None
     primary_key: bool = False
-    auto_increment: bool = False
     if_not_exists: bool = False
-    comment: str | None = None
     unique_constraint: UniqueConstraint | None = None
     check_constraint: CheckConstraint | None = None
     foreign_key: ForeignKey | None = None
+    generated_as_: Generated | None = None
 
     def check(self, expr: str, name: str | None = None) -> Column:
         self.check_constraint = CheckConstraint(expr, name)
@@ -127,6 +138,10 @@ class Column:
             target_columns=columns,
             match=match,
         )
+        return self
+
+    def generated_as(self, expr: str, stored: bool = True) -> Column:
+        self.generated_as_ = Generated(expr, stored)
         return self
 
 

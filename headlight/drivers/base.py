@@ -7,7 +7,6 @@ from types import TracebackType
 
 from headlight.schema import types
 
-
 T = typing.TypeVar('T', bound='DbDriver')
 
 
@@ -23,7 +22,7 @@ class DbDriver(abc.ABC):
 
     create_table_template = 'CREATE TABLE{if_not_exists}{name} ({column_sql})'
     drop_table_template = 'DROP TABLE {name}'
-    column_template = '{name} {type}{primary_key}{check}{unique}{null}{default}{foreign}'
+    column_template = '{name} {type}{primary_key}{check}{unique}{null}{default}{foreign}{generated_as}'
     create_index_template = (
         'CREATE{unique} INDEX{concurrently}{if_not_exists}{name} ON{only} {table}{using} ({columns})'
         '{include}{with_}{tablespace}{where}'
@@ -47,6 +46,7 @@ class DbDriver(abc.ABC):
     change_column_type = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} TYPE {type}{collate}{using}'
     add_table_check_template = 'ALTER TABLE{if_table_exists}{only} {table} ADD {constraint}'
     drop_table_constraint_template = 'ALTER TABLE{if_table_exists}{only} {table} DROP CONSTRAINT{if_exists} {name}'
+    generated_as_template = 'GENERATED ALWAYS AS ({expr}) {stored}'
 
     @classmethod
     @abc.abstractmethod

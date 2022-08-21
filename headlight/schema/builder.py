@@ -5,10 +5,19 @@ import inspect
 import typing
 
 from headlight.schema import ops, types
-from headlight.schema.schema import Action, CheckConstraint, Column, Constraint, ForeignKey, Index, IndexExpr, \
-    MatchType, \
-    PrimaryKeyConstraint, \
-    UniqueConstraint
+from headlight.schema.schema import (
+    Action,
+    CheckConstraint,
+    Column,
+    Constraint,
+    ForeignKey,
+    Generated,
+    Index,
+    IndexExpr,
+    MatchType,
+    PrimaryKeyConstraint,
+    UniqueConstraint,
+)
 
 
 class CreateTableBuilder:
@@ -21,6 +30,16 @@ class CreateTableBuilder:
         self._constraints: list[Constraint] = []
         self._indices: list[Index] = []
 
+    def autoincrements(self, name: str = 'id') -> None:
+        self.add_column(name=name, type=types.BigIntegerType(auto_increment=True), primary_key=True, null=False)
+
+    def timestamps(self, created_name: str = 'created_at', updated_name: str = 'updated_at') -> None:
+        self.add_column(created_name, types.DateTimeType(True), null=False, default='now()')
+        self.add_column(updated_name, types.DateTimeType(True), null=True)
+
+    def created_timestamp(self, created_name: str = 'created_at') -> None:
+        self.add_column(created_name, types.DateTimeType(True), null=False, default='now()')
+
     def add_column(
         self,
         name: str,
@@ -28,11 +47,10 @@ class CreateTableBuilder:
         null: bool = False,
         default: str | None = None,
         primary_key: bool = False,
-        auto_increment: bool = False,
         if_not_exists: bool = False,
-        comment: str | None = None,
         unique: UniqueConstraint | bool | str | None = None,
         check: CheckConstraint | str | tuple[str, str] | None = None,
+        generated_as: Generated | str | None = None,
     ) -> Column:
         type = type() if inspect.isclass(type) else type
 
@@ -54,17 +72,22 @@ class CreateTableBuilder:
             case (constraint_name, expr):
                 check_constraint = CheckConstraint(expr=expr, name=constraint_name)
 
+        generated_as = (
+            Generated(expr=generated_as, stored=True)
+            if generated_as and isinstance(generated_as, str)
+            else generated_as
+        )
+
         column = Column(
             name=name,
             type=type,
             null=null,
             default=default,
             primary_key=primary_key,
-            auto_increment=auto_increment,
+            generated_as_=generated_as,
             if_not_exists=if_not_exists,
-            comment=comment,
-            unique_constraint=unique_constraint,
             check_constraint=check_constraint,
+            unique_constraint=unique_constraint,
         )
 
         self._columns.append(column)
@@ -83,10 +106,19 @@ class CreateTableBuilder:
     ) -> None:
         index_exprs = [IndexExpr(column) if isinstance(column, str) else column for column in columns]
         index_name = name or self._table_name + '_' + '_'.join([expr.column for expr in index_exprs]) + '_idx'
-        self._indices.append(Index(
-            name=index_name, table_name=self._table_name, unique=unique, using=using, columns=index_exprs,
-            include=include, with_=with_, tablespace=tablespace, where=where,
-        ))
+        self._indices.append(
+            Index(
+                name=index_name,
+                table_name=self._table_name,
+                unique=unique,
+                using=using,
+                columns=index_exprs,
+                include=include,
+                with_=with_,
+                tablespace=tablespace,
+                where=where,
+            )
+        )
 
     def add_check_constraint(self, expr: str, name: str | None = None) -> None:
         self._constraints.append(CheckConstraint(expr, name))
@@ -363,13 +395,15 @@ class Blueprint:
     ) -> typing.ContextManager[CreateTableBuilder]:
         builder = CreateTableBuilder(table_name)
         yield builder
-        self._ops.append(ops.CreateTableOp(
-            table_name=table_name,
-            columns=builder._columns,
-            constraints=builder._constraints,
-            indices=builder._indices,
-            if_not_exists=if_not_exists,
-        ))
+        self._ops.append(
+            ops.CreateTableOp(
+                table_name=table_name,
+                columns=builder._columns,
+                constraints=builder._constraints,
+                indices=builder._indices,
+                if_not_exists=if_not_exists,
+            )
+        )
 
     @contextlib.contextmanager  # type: ignore[arg-type]
     def alter_table(
