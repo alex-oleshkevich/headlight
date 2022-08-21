@@ -36,11 +36,13 @@ class CreateTableBuilder:
     def autoincrements(self, name: str = 'id') -> None:
         self.add_column(name=name, type=types.BigIntegerType(auto_increment=True), primary_key=True, null=False)
 
-    def timestamps(self, created_name: str = 'created_at', updated_name: str = 'updated_at', tz: bool = True) -> None:
+    def add_timestamps(
+        self, created_name: str = 'created_at', updated_name: str = 'updated_at', tz: bool = True
+    ) -> None:
         self.add_column(created_name, types.DateTimeType(tz), null=False, default='now()')
         self.add_column(updated_name, types.DateTimeType(tz), null=True)
 
-    def created_timestamp(self, created_name: str = 'created_at', tz: bool = True) -> None:
+    def add_created_timestamp(self, created_name: str = 'created_at', tz: bool = True) -> None:
         self.add_column(created_name, types.DateTimeType(tz), null=False, default='now()')
 
     def add_column(

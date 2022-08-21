@@ -56,7 +56,7 @@ def migrate(schema: Blueprint) -> None:
         table.add_column('active', types.BooleanType(), default='1')
         table.add_column('photo', types.VarCharType(512), null=True)
         table.add_column('deleted_at', types.DateTimeType(True), null=True)
-        table.created_timestamp('joined_at')
+        table.add_created_timestamp('joined_at')
         table.add_index(['(lower(email))'], unique=True)
 ```
 
