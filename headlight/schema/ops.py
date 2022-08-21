@@ -10,16 +10,50 @@ from headlight.schema.types import Type
 
 
 @dataclasses.dataclass
-class CheckConstraint:
-    expr: str
-    name: str | None = None
+class Constraint:
+    def compile(self, driver: DbDriver) -> str:
+        raise NotImplementedError()
 
 
 @dataclasses.dataclass
-class UniqueConstraint:
+class CheckConstraint(Constraint):
+    expr: str
+    name: str | None = None
+
+    def compile(self, driver: DbDriver) -> str:
+        expr = self.expr.replace('%', '%%')
+        return driver.check_constraint_template.format(
+            expr=expr,
+            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
+        )
+
+
+@dataclasses.dataclass
+class UniqueConstraint(Constraint):
     name: str | None = None
     include: list[str] | None = None
     columns: list[str] | None = None
+
+    def compile(self, driver: DbDriver) -> str:
+        return driver.unique_constraint_template.format(
+            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
+            columns=' (%s)' % ', '.join(self.columns) if self.columns else '',
+            include=' INCLUDE (%s)' % ', '.join(self.include) if self.include else '',
+        )
+
+
+@dataclasses.dataclass
+class PrimaryKeyConstraint(Constraint):
+    name: str | None
+    columns: list[str]
+    include: list[str] = dataclasses.field(default_factory=list)
+
+    def compile(self, driver: DbDriver) -> str:
+        return driver.primary_key_constraint_template.format(
+            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
+            columns=', '.join(self.columns) if self.columns else '',
+            include=' INCLUDE (%s)' % ', '.join(self.include) if self.include else '',
+        )
 
 
 Action = typing.Literal['RESTRICT', 'CASCADE', 'NO ACTION', 'SET NULL', 'SET DEFAULT']
@@ -27,7 +61,7 @@ MatchType = typing.Literal['FULL', 'PARTIAL', 'SIMPLE']
 
 
 @dataclasses.dataclass
-class ForeignKey:
+class ForeignKey(Constraint):
     target_table: str
     target_columns: list[str] | None = None
     self_columns: list[str] | None = None
@@ -35,6 +69,17 @@ class ForeignKey:
     on_update: Action | None = None
     name: str | None = None
     match: MatchType | None = None
+
+    def compile(self, driver: DbDriver) -> str:
+        return driver.foreign_key_template.format(
+            self_columns='FOREIGN KEY (%s) ' % ', '.join(self.self_columns) if self.self_columns else '',
+            constraint=f'CONSTRAINT {self.name} ' if self.name else '',
+            references=f'REFERENCES {self.target_table}',
+            columns=' (%s)' % ', '.join(self.target_columns) if self.target_columns else '',
+            on_delete=f' ON DELETE {self.on_delete}' if self.on_delete else '',
+            on_update=f' ON UPDATE {self.on_update}' if self.on_update else '',
+            match=f' MATCH {self.match}' if self.match else '',
+        )
 
 
 @dataclasses.dataclass
@@ -172,34 +217,6 @@ class CreateIndexOp(Operation):
         return driver.drop_index_template.format(name=self.name)
 
 
-def compile_unique_constraint(driver: DbDriver, constraint: UniqueConstraint) -> str:
-    return driver.unique_constraint_template.format(
-        constraint=f'CONSTRAINT {constraint.name} ' if constraint.name else '',
-        columns=' (%s)' % ', '.join(constraint.columns) if constraint.columns else '',
-        include=' INCLUDE (%s)' % ', '.join(constraint.include) if constraint.include else '',
-    )
-
-
-def compile_check_constraint(driver: DbDriver, constraint: CheckConstraint) -> str:
-    expr = constraint.expr.replace('%', '%%')
-    return driver.check_constraint_template.format(
-        expr=expr,
-        constraint=f'CONSTRAINT {constraint.name} ' if constraint.name else '',
-    )
-
-
-def compile_foreign_key(driver: DbDriver, key: ForeignKey) -> str:
-    return driver.foreign_key_template.format(
-        self_columns='FOREIGN KEY (%s) ' % ', '.join(key.self_columns) if key.self_columns else '',
-        constraint=f'CONSTRAINT {key.name} ' if key.name else '',
-        references=f'REFERENCES {key.target_table}',
-        columns=' (%s)' % ', '.join(key.target_columns) if key.target_columns else '',
-        on_delete=f' ON DELETE {key.on_delete}' if key.on_delete else '',
-        on_update=f' ON UPDATE {key.on_update}' if key.on_update else '',
-        match=f' MATCH {key.match}' if key.match else '',
-    )
-
-
 class CreateTableOp(Operation):
     def __init__(
         self,
@@ -303,16 +320,12 @@ class CreateTableOp(Operation):
             + driver.column_template.format(
                 name=column.name,
                 null='' if column.null else ' NOT NULL',
-                check=f' {compile_check_constraint(driver, column.check_constraint)}'
-                if column.check_constraint
-                else '',
+                check=f' {column.check_constraint.compile(driver)}' if column.check_constraint else '',
                 type=driver.get_sql_for_type(column.type),
                 default=f" DEFAULT '{column.default}'" if column.default is not None else '',
                 primary_key=' PRIMARY KEY' if pk_count == 1 and column.primary_key else '',
-                foreign=f' {compile_foreign_key(driver, column.foreign_key)}' if column.foreign_key else '',
-                unique=f' {compile_unique_constraint(driver, column.unique_constraint)}'
-                if column.unique_constraint
-                else '',
+                foreign=f' {column.foreign_key.compile(driver)}' if column.foreign_key else '',
+                unique=f' {column.unique_constraint.compile(driver)}' if column.unique_constraint else '',
             )
             for column in self.columns
         ]
@@ -322,15 +335,14 @@ class CreateTableOp(Operation):
 
         if self.checks:
             for check in self.checks:
-                column_stmts.append(f'    {compile_check_constraint(driver, check)}')
+                column_stmts.append(f'    {check.compile(driver)}')
 
         if self.unique:
-            unique_stmt = compile_unique_constraint(driver, self.unique)
-            column_stmts.append(f'    {unique_stmt}')
+            column_stmts.append(f'    {self.unique.compile(driver)}')
 
         if self.foreign_keys:
             for fk in self.foreign_keys:
-                column_stmts.append(f'    {compile_foreign_key(driver, fk)}')
+                column_stmts.append(f'    {fk.compile(driver)}')
 
         return driver.create_table_template.format(
             name=self.table_name,
@@ -356,6 +368,7 @@ class AddColumnOp(Operation):
         only: bool = False,
         null: bool = False,
         default: str | None = None,
+        primary_key: bool | None = None,
         foreign_key: ForeignKey | None = None,
     ) -> None:
         self.type = type
@@ -366,6 +379,7 @@ class AddColumnOp(Operation):
         self.table_name = table_name
         self.column_name = column_name
         self.foreign_key = foreign_key
+        self.primary_key = primary_key
         self.if_table_exists = if_table_exists
         self.check_constraint = check_constraint
         self.unique_constraint = unique_constraint
@@ -399,17 +413,18 @@ class AddColumnOp(Operation):
     def to_up_sql(self, driver: DbDriver) -> str:
         return driver.add_column_template.format(
             table=self.table_name,
-            only=' ONLY' if self.only else '',
-            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
-            if_column_not_exists=' IF NOT EXISTS' if self.if_column_not_exists else '',
             name=self.column_name,
-            type=driver.get_sql_for_type(self.type),
-            collate=f' COLLATE "{self.collate}"' if self.collate else '',
+            only=' ONLY' if self.only else '',
             null='' if self.null else ' NOT NULL',
-            check=f' {compile_check_constraint(driver, self.check_constraint)}' if self.check_constraint else '',
+            type=driver.get_sql_for_type(self.type),
+            pk=' PRIMARY KEY' if self.primary_key else '',
+            collate=f' COLLATE "{self.collate}"' if self.collate else '',
+            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
             default=f" DEFAULT '{self.default}'" if self.default is not None else '',
-            foreign=f' {compile_foreign_key(driver, self.foreign_key)}' if self.foreign_key else '',
-            unique=f' {compile_unique_constraint(driver, self.unique_constraint)}' if self.unique_constraint else '',
+            if_column_not_exists=' IF NOT EXISTS' if self.if_column_not_exists else '',
+            foreign=f' {self.foreign_key.compile(driver)}' if self.foreign_key else '',
+            check=f' {self.check_constraint.compile(driver)}' if self.check_constraint else '',
+            unique=f' {self.unique_constraint.compile(driver)}' if self.unique_constraint else '',
         )
 
     def to_down_sql(self, driver: DbDriver) -> str:
@@ -725,6 +740,72 @@ class ChangeColumn:
         return self
 
 
+class AddTableConstraintOp(Operation):
+    def __init__(
+        self,
+        constraint: Constraint,
+        table_name: str,
+        only: bool = False,
+        if_table_exists: bool = False,
+    ) -> None:
+        self.only = only
+        self.constraint = constraint
+        self.table_name = table_name
+        self.if_table_exists = if_table_exists
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.add_table_check_template.format(
+            table=self.table_name,
+            constraint=self.constraint.compile(driver),
+            only=' ONLY' if self.only else '',
+            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
+        )
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        return DropTableConstraintOp(
+            constraint_name=getattr(self.constraint, 'name'),
+            table_name=self.table_name,
+            only=self.only,
+            if_table_exists=self.if_table_exists,
+            current_constraint=self.constraint,
+        ).to_up_sql(driver)
+
+
+class DropTableConstraintOp(Operation):
+    def __init__(
+        self,
+        constraint_name: str,
+        table_name: str,
+        only: bool = False,
+        if_exists: bool = False,
+        if_table_exists: bool = False,
+        current_constraint: Constraint | None = None,
+    ) -> None:
+        self.only = only
+        self.if_exists = if_exists
+        self.table_name = table_name
+        self.constraint_name = constraint_name
+        self.if_table_exists = if_table_exists
+        self.current_constraint = current_constraint
+
+    def to_up_sql(self, driver: DbDriver) -> str:
+        return driver.drop_table_constraint_template.format(
+            table=self.table_name,
+            name=self.constraint_name,
+            only=' ONLY' if self.only else '',
+            if_exists=' IF EXISTS' if self.if_exists else '',
+            if_table_exists=' IF EXISTS' if self.if_table_exists else '',
+        )
+
+    def to_down_sql(self, driver: DbDriver) -> str:
+        return AddTableConstraintOp(
+            constraint=self.current_constraint,
+            table_name=self.table_name,
+            only=self.only,
+            if_table_exists=self.if_table_exists,
+        ).to_up_sql(driver)
+
+
 class AlterTableOp:
     def __init__(self, table_name: str, if_exists: bool = False, only: bool = False) -> None:
         self.table_name = table_name
@@ -737,6 +818,7 @@ class AlterTableOp:
         name: str,
         type: Type,
         null: bool = False,
+        primary_key: bool | None = None,
         default: str | None = None,
         unique: bool | UniqueConstraint | None = None,
         check: CheckConstraint | None = None,
@@ -773,6 +855,7 @@ class AlterTableOp:
             only=self.only,
             null=null,
             default=default,
+            primary_key=primary_key,
             if_column_not_exists=if_column_not_exists,
         )
         self.extra_ops.append(op)
@@ -797,4 +880,61 @@ class AlterTableOp:
             column_name=column_name,
             only=self.only,
             if_table_exists=self.if_exists,
+        )
+
+    def add_check_constraint(self, name: str, expr: str) -> None:
+        self.extra_ops.append(
+            AddTableConstraintOp(
+                constraint=CheckConstraint(expr, name),
+                table_name=self.table_name,
+                only=self.only,
+                if_table_exists=self.if_exists,
+            )
+        )
+
+    def add_unique_constraint(self, name: str, columns: list[str], include: list[str] | None = None) -> None:
+        self.extra_ops.append(
+            AddTableConstraintOp(
+                constraint=UniqueConstraint(name=name, include=include, columns=columns),
+                table_name=self.table_name,
+                only=self.only,
+                if_table_exists=self.if_exists,
+            )
+        )
+
+    def add_primary_key(self, name: str, columns: list[str], include: list[str] | None = None) -> None:
+        self.extra_ops.append(
+            AddTableConstraintOp(
+                constraint=PrimaryKeyConstraint(name=name, columns=columns, include=include),
+                table_name=self.table_name,
+                only=self.only,
+                if_table_exists=self.if_exists,
+            )
+        )
+
+    def add_foreign_key(
+        self,
+        name: str,
+        target_table: str,
+        target_columns: list[str] | None = None,
+        self_columns: list[str] | None = None,
+        on_delete: Action | None = None,
+        on_update: Action | None = None,
+        match: MatchType | None = None,
+    ) -> None:
+        self.extra_ops.append(
+            AddTableConstraintOp(
+                constraint=ForeignKey(
+                    name=name,
+                    target_table=target_table,
+                    target_columns=target_columns,
+                    self_columns=self_columns,
+                    on_delete=on_delete,
+                    on_update=on_update,
+                    match=match,
+                ),
+                table_name=self.table_name,
+                only=self.only,
+                if_table_exists=self.if_exists,
+            )
         )

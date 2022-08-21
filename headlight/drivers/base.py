@@ -30,11 +30,12 @@ class DbDriver(abc.ABC):
     drop_index_template = 'DROP INDEX {name}'
     index_column_template = '{expr}{collation}{opclass}{opclass_params}{sorting}{nulls}'
     unique_constraint_template = '{constraint}UNIQUE{columns}{include}'
+    primary_key_constraint_template = '{constraint}PRIMARY KEY({columns}){include}'
     check_constraint_template = '{constraint}CHECK ({expr})'
-    foreign_key_template = '{constraint}{self_columns}{references}{match}{on_delete}{on_update}{columns}'
+    foreign_key_template = '{constraint}{self_columns}{references}{columns}{match}{on_delete}{on_update}'
     add_column_template = (
         'ALTER TABLE{if_table_exists}{only} {table} '
-        'ADD{if_column_not_exists} {name} {type}{collate}{check}{unique}{null}{default}{foreign}'
+        'ADD{if_column_not_exists} {name} {type}{pk}{collate}{check}{unique}{null}{default}{foreign}'
     )
     drop_column_template = 'ALTER TABLE{if_table_exists}{only} {table} DROP{if_column_exists} {name}'
     add_column_default_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} SET DEFAULT {expr}'
@@ -42,8 +43,9 @@ class DbDriver(abc.ABC):
 
     add_column_null_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} SET NOT NULL'
     drop_column_null_template = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} DROP NOT NULL'
-
     change_column_type = 'ALTER TABLE{if_table_exists}{only} {table} ALTER {name} TYPE {type}{collate}{using}'
+    add_table_check_template = 'ALTER TABLE{if_table_exists}{only} {table} ADD {constraint}'
+    drop_table_constraint_template = 'ALTER TABLE{if_table_exists}{only} {table} DROP CONSTRAINT{if_exists} {name}'
 
     @classmethod
     @abc.abstractmethod
