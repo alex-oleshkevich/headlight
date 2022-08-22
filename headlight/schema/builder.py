@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import inspect
-import string
 import typing
 
 from headlight.schema import ops, types
@@ -13,7 +12,7 @@ from headlight.schema.schema import (
     Constraint,
     DropMode,
     ForeignKey,
-    Generated,
+    GeneratedAs,
     Index,
     IndexExpr,
     MatchType,
@@ -28,22 +27,19 @@ class CreateTableBuilder:
         self,
         table_name: str,
     ) -> None:
-        self._table_name = table_name
-        self._columns: list[Column] = []
-        self._constraints: list[Constraint] = []
-        self._indices: list[Index] = []
+        self._table = Table(name=table_name)
 
-    def autoincrements(self, name: str = 'id') -> None:
+    def autoincrements(self, name: str = "id") -> None:
         self.add_column(name=name, type=types.BigIntegerType(auto_increment=True), primary_key=True, null=False)
 
     def add_timestamps(
-        self, created_name: str = 'created_at', updated_name: str = 'updated_at', tz: bool = True
+        self, created_name: str = "created_at", updated_name: str = "updated_at", tz: bool = True
     ) -> None:
-        self.add_column(created_name, types.DateTimeType(tz), null=False, default='now()')
+        self.add_column(created_name, types.DateTimeType(tz), null=False, default="now()")
         self.add_column(updated_name, types.DateTimeType(tz), null=True)
 
-    def add_created_timestamp(self, created_name: str = 'created_at', tz: bool = True) -> None:
-        self.add_column(created_name, types.DateTimeType(tz), null=False, default='now()')
+    def add_created_timestamp(self, created_name: str = "created_at", tz: bool = True) -> None:
+        self.add_column(created_name, types.DateTimeType(tz), null=False, default="now()")
 
     def add_column(
         self,
@@ -52,50 +48,25 @@ class CreateTableBuilder:
         null: bool = False,
         default: str | None = None,
         primary_key: bool = False,
-        if_not_exists: bool = False,
         unique: UniqueConstraint | bool | str | None = None,
-        check: CheckConstraint | str | tuple[str, str] | None = None,
-        generated_as: Generated | str | None = None,
+        checks: list[CheckConstraint | str | tuple[str, str]] | None = None,
+        generated_as: GeneratedAs | str | None = None,
     ) -> Column:
-        type = type() if inspect.isclass(type) else type
-
-        unique_constraint: UniqueConstraint | None = None
-        match unique:
-            case UniqueConstraint():
-                unique_constraint = unique
-            case True:
-                unique_constraint = UniqueConstraint()
-            case constraint_name if isinstance(constraint_name, str):
-                unique_constraint = UniqueConstraint(name=constraint_name)
-
-        check_constraint: CheckConstraint | None = None
-        match check:
-            case CheckConstraint():
-                check_constraint = check
-            case expr if isinstance(expr, str):
-                check_constraint = CheckConstraint(expr=expr)
-            case (constraint_name, expr):
-                check_constraint = CheckConstraint(expr=expr, name=constraint_name)
-
-        generated_as = (
-            Generated(expr=generated_as, stored=True)
-            if generated_as and isinstance(generated_as, str)
-            else generated_as
-        )
-
+        column_type = type() if inspect.isclass(type) else type
+        unique_constraint = UniqueConstraint.new(unique) if unique else None
+        check_constraints = [CheckConstraint.new(check) for check in checks] if checks else []
+        generated_as = GeneratedAs.new(generated_as) if generated_as else None
         column = Column(
             name=name,
-            type=type,
+            type=column_type,
             null=null,
             default=default,
             primary_key=primary_key,
             generated_as_=generated_as,
-            if_not_exists=if_not_exists,
-            check_constraint=check_constraint,
+            check_constraints=check_constraints,
             unique_constraint=unique_constraint,
         )
-
-        self._columns.append(column)
+        self._table.columns.append(column)
         return column
 
     def add_index(
@@ -109,18 +80,13 @@ class CreateTableBuilder:
         where: str | None = None,
         tablespace: str | None = None,
     ) -> None:
-        def sanitize_name(name: str) -> str:
-            return ''.join([c for c in name if c in string.ascii_letters + string.digits])
+        index_expr = IndexExpr.from_specs(columns)
+        index_name = name or Index.generate_name(self._table.name, index_expr)
 
-        index_expr = [IndexExpr(column) if isinstance(column, str) else column for column in columns]
-        index_name = (
-            name or self._table_name + '_' + '_'.join([sanitize_name(expr.column) for expr in index_expr]) + '_idx'
-        )
-
-        self._indices.append(
+        self._table.indices.append(
             Index(
                 name=index_name,
-                table_name=self._table_name,
+                table_name=self._table.name,
                 unique=unique,
                 using=using,
                 columns=index_expr,
@@ -132,7 +98,8 @@ class CreateTableBuilder:
         )
 
     def add_check_constraint(self, expr: str, name: str | None = None) -> None:
-        self._constraints.append(CheckConstraint(expr, name))
+        name = name or CheckConstraint.generate_name(self._table.name, expr)
+        self._table.constraints.append(CheckConstraint(expr, name))
 
     def add_unique_constraint(
         self,
@@ -140,10 +107,12 @@ class CreateTableBuilder:
         name: str | None = None,
         include: list[str] | None = None,
     ) -> None:
-        self._constraints.append(UniqueConstraint(name=name, include=include, columns=columns))
+        name = name or UniqueConstraint.generate_name(self._table.name, columns)
+        self._table.constraints.append(UniqueConstraint(name=name, include=include, columns=columns))
 
     def add_primary_key(self, columns: list[str], name: str | None = None, include: list[str] | None = None) -> None:
-        self._constraints.append(PrimaryKeyConstraint(name=name, columns=columns, include=include))
+        name = name or PrimaryKeyConstraint.generate_name(self._table.name, columns)
+        self._table.constraints.append(PrimaryKeyConstraint(name=name, columns=columns, include=include))
 
     def add_foreign_key(
         self,
@@ -155,7 +124,8 @@ class CreateTableBuilder:
         on_update: Action | None = None,
         match: MatchType | None = None,
     ) -> None:
-        self._constraints.append(
+        name = name or ForeignKey.generate_name(self._table.name, target_table, columns)
+        self._table.constraints.append(
             ForeignKey(
                 name=name,
                 match=match,
@@ -211,7 +181,7 @@ class ChangeColumn:
     def set_nullable(self, flag: bool) -> ChangeColumn:
         if flag:
             self._ops.append(
-                ops.DropNullOp(
+                ops.DropNotNullOp(
                     table_name=self._table_name,
                     column_name=self._column_name,
                     only=self._only,
@@ -220,7 +190,7 @@ class ChangeColumn:
             )
         else:
             self._ops.append(
-                ops.SetNullOp(
+                ops.SetNotNullOp(
                     table_name=self._table_name,
                     column_name=self._column_name,
                     only=self._only,
@@ -273,44 +243,31 @@ class AlterTableBuilder:
         primary_key: bool | None = None,
         default: str | None = None,
         unique: bool | UniqueConstraint | None = None,
-        check: CheckConstraint | None = None,
+        checks: list[CheckConstraint | str | tuple[str, str]] | None = None,
         if_table_exists: bool = False,
         if_column_not_exists: bool = False,
         collate: str | None = None,
+        generated_as: str | GeneratedAs | None = None,
     ) -> ops.AddColumnOp:
-        type = type() if inspect.isclass(type) else type
-
-        unique_constraint: UniqueConstraint | None = None
-        match unique:
-            case UniqueConstraint():
-                unique_constraint = unique
-            case True:
-                unique_constraint = UniqueConstraint()
-            case constraint_name if isinstance(constraint_name, str):
-                unique_constraint = UniqueConstraint(name=constraint_name)
-
-        check_constraint: CheckConstraint | None = None
-        match check:
-            case CheckConstraint():
-                check_constraint = check
-            case expr if isinstance(expr, str):
-                check_constraint = CheckConstraint(expr=expr)
-            case (constraint_name, expr):
-                check_constraint = CheckConstraint(expr=expr, name=constraint_name)
-
+        column_type = type() if inspect.isclass(type) else type
+        unique_constraint = UniqueConstraint.new(unique) if unique is not None else None
+        check_constraints = [CheckConstraint.new(check) for check in checks] if checks is not None else []
         op = ops.AddColumnOp(
             table_name=self._table_name,
-            column_name=name,
-            type=type,
             if_table_exists=if_table_exists,
-            unique_constraint=unique_constraint,
-            check_constraint=check_constraint,
-            collate=collate,
-            only=self._only,
-            null=null,
-            default=default,
-            primary_key=primary_key,
             if_column_not_exists=if_column_not_exists,
+            only=self._only,
+            column=Column(
+                name=name,
+                type=column_type,
+                unique_constraint=unique_constraint,
+                check_constraints=check_constraints,
+                collate=collate,
+                null=null,
+                default=default,
+                primary_key=primary_key,
+                generated_as_=GeneratedAs.new(generated_as) if generated_as else None,
+            ),
         )
         self.ops.append(op)
         return op
@@ -432,29 +389,9 @@ class Blueprint:
     ) -> typing.ContextManager[CreateTableBuilder]:
         builder = CreateTableBuilder(table_name)
         yield builder
-        self._ops.append(
-            ops.CreateTableOp(
-                table_name=table_name,
-                columns=builder._columns,
-                constraints=builder._constraints,
-                indices=builder._indices,
-                if_not_exists=if_not_exists,
-            )
-        )
-        for index in builder._indices:
-            self._ops.append(
-                ops.CreateIndexOp(
-                    table=index.table_name,
-                    columns=index.columns,
-                    name=index.name,
-                    unique=index.unique,
-                    using=index.using,
-                    include=index.include,
-                    with_=index.with_,
-                    where=index.where,
-                    tablespace=index.tablespace,
-                )
-            )
+        self._ops.append(ops.CreateTableOp(table=builder._table, if_not_exists=if_not_exists))
+        for index in builder._table.indices:
+            self._ops.append(ops.CreateIndexOp(index=index))
 
     @contextlib.contextmanager  # type: ignore[arg-type]
     def alter_table(

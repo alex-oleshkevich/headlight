@@ -7,24 +7,24 @@ import traceback
 from headlight.migrator import MigrateHooks, Migration, MigrationError, Migrator, create_migration_template
 from headlight.utils import colorize_sql
 
-database_help = 'Database connection URL.'
-migrations_help = 'Migrations directory.'
-dry_run_help = 'Simulate migration execution (nothing will be applied to the database).'
-table_help = 'History table name.'
-revert_steps_help = 'The number of migrations to be reverted.'
-fake_help = 'Write history table records without running any SQL command.'
-print_help = 'Print generated SQL to stderr.'
-migration_name_help = 'The name of the migration.'
-yes_help = 'Automatically confirm action.'
+database_help = "Database connection URL."
+migrations_help = "Migrations directory."
+dry_run_help = "Simulate migration execution (nothing will be applied to the database)."
+table_help = "History table name."
+revert_steps_help = "The number of migrations to be reverted."
+fake_help = "Write history table records without running any SQL command."
+print_help = "Print generated SQL to stderr."
+migration_name_help = "The name of the migration."
+yes_help = "Automatically confirm action."
 
-DATABASE_ENVVAR = 'HL_DATABASE_URL'
+DATABASE_ENVVAR = "HL_DATABASE_URL"
 
 
 class LoggingHooks(MigrateHooks):
     def before_migrate(self, migration: Migration) -> None:
         click.secho(
-            '{status} {filename}'.format(
-                status=click.style('Migrating'.ljust(10, ' '), fg='yellow'),
+            "{status} {filename}".format(
+                status=click.style("Migrating".ljust(10, " "), fg="yellow"),
                 filename=os.path.basename(migration.file),
             ),
             nl=False,
@@ -32,18 +32,18 @@ class LoggingHooks(MigrateHooks):
 
     def after_migrate(self, migration: Migration, time_taken: float) -> None:
         click.secho(
-            '\r{status} {filename} {time}'.format(
-                status=click.style('Done'.ljust(10, ' '), fg='green'),
-                time=click.style(f'({time_taken:.3f}s)', fg='cyan'),
+            "\r{status} {filename} {time}".format(
+                status=click.style("Done".ljust(10, " "), fg="green"),
+                time=click.style(f"({time_taken:.3f}s)", fg="cyan"),
                 filename=os.path.basename(migration.file),
             )
         )
 
     def on_error(self, migration: Migration, exc: Exception, time_taken: float) -> None:
         click.secho(
-            '\r{status} {filename} {time}'.format(
-                status=click.style('Fail'.ljust(10, ' '), fg='red'),
-                time=click.style(f'({time_taken:.3f}s)', fg='cyan'),
+            "\r{status} {filename} {time}".format(
+                status=click.style("Fail".ljust(10, " "), fg="red"),
+                time=click.style(f"({time_taken:.3f}s)", fg="cyan"),
                 filename=os.path.basename(migration.file),
             )
         )
@@ -51,18 +51,18 @@ class LoggingHooks(MigrateHooks):
 
 def get_config_from_pyproject() -> dict[str, str]:
     for dir in pathlib.Path(__file__).parents:
-        pyproject = dir / 'pyproject.toml'
+        pyproject = dir / "pyproject.toml"
         if pyproject.exists():
             config = tomli.loads(pyproject.read_text())
-            return config.get('tool', {}).get('headlight', {})
+            return config.get("tool", {}).get("headlight", {})
     return {}
 
 
 config = get_config_from_pyproject()
-default_dir = config.get('directory', 'migrations')
-default_table = config.get('table', 'migrations')
-default_db = config.get('database_url')
-if default_db is not None and default_db.startswith('$'):
+default_dir = config.get("directory", "migrations")
+default_table = config.get("table", "migrations")
+default_db = config.get("database_url")
+if default_db is not None and default_db.startswith("$"):
     default_db = os.environ.get(default_db[1:].strip())
 
 
@@ -72,22 +72,22 @@ def app() -> None:
 
 
 @app.command()
-@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
+@click.option("-d", "--database", help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
 @click.option(
-    '-m',
-    '--migrations',
+    "-m",
+    "--migrations",
     default=default_dir,
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
     show_default=True,
     required=True,
     help=migrations_help,
 )
-@click.option('--table', default=default_table, show_default=True, help=table_help, required=True)
-@click.option('--dry-run', is_flag=True, default=False, show_default=True, help=dry_run_help)
-@click.option('--fake', is_flag=True, default=False, help=fake_help)
-@click.option('--print-sql', is_flag=True, default=False, help=print_help)
-@click.option('--yes', '-y', is_flag=True, default=False, help=yes_help)
-@click.option('--verbose', is_flag=True, default=False)
+@click.option("--table", default=default_table, show_default=True, help=table_help, required=True)
+@click.option("--dry-run", is_flag=True, default=False, show_default=True, help=dry_run_help)
+@click.option("--fake", is_flag=True, default=False, help=fake_help)
+@click.option("--print-sql", is_flag=True, default=False, help=print_help)
+@click.option("--yes", "-y", is_flag=True, default=False, help=yes_help)
+@click.option("--verbose", is_flag=True, default=False)
 def upgrade(
     *,
     database: str,
@@ -99,12 +99,12 @@ def upgrade(
     yes: bool,
     verbose: bool,
 ) -> None:
-    _, _, db_name = database.rpartition('/')
-    db_type, _, _ = database.partition('://')
+    _, _, db_name = database.rpartition("/")
+    db_type, _, _ = database.partition("://")
     click.secho(
-        'Upgrade {type} database {db}.'.format(
-            db=click.style(db_name, fg='cyan'),
-            type=click.style(db_type, fg='green'),
+        "Upgrade {type} database {db}.".format(
+            db=click.style(db_name, fg="cyan"),
+            type=click.style(db_type, fg="green"),
         )
     )
 
@@ -112,13 +112,13 @@ def upgrade(
     migrator.initialize_db()
     pending_count = len(migrator.get_pending_migrations())
     if not pending_count:
-        return click.echo('No pending migration(s).')
+        return click.echo("No pending migration(s).")
 
-    click.secho('Will apply {count} pending migration(s).'.format(count=click.style(str(pending_count), fg='cyan')))
+    click.secho("Will apply {count} pending migration(s).".format(count=click.style(str(pending_count), fg="cyan")))
 
     if not yes:
         click.confirm(
-            'Database schema will be {action}. Continue?'.format(action=click.style('upgraded', fg='yellow')),
+            "Database schema will be {action}. Continue?".format(action=click.style("upgraded", fg="yellow")),
             show_default=True,
             abort=True,
         )
@@ -128,31 +128,31 @@ def upgrade(
     except MigrationError as ex:
         if verbose:
             traceback.print_exception(ex)
-        click.echo('')
-        click.secho('-' * 30 + f' FAIL: {ex.migration.file} ' + '-' * 30, fg='red')
-        click.secho(f'Error: {ex}', fg='red')
-        click.echo('Statement, that caused error:')
+        click.echo("")
+        click.secho("-" * 30 + f" FAIL: {ex.migration.file} " + "-" * 30, fg="red")
+        click.secho(f"Error: {ex}", fg="red")
+        click.echo("Statement, that caused error:")
         click.echo(colorize_sql(ex.stmt))
 
 
 @app.command()
-@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
+@click.option("-d", "--database", help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
 @click.option(
-    '-m',
-    '--migrations',
+    "-m",
+    "--migrations",
     default=default_dir,
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
     show_default=True,
     required=True,
     help=migrations_help,
 )
-@click.option('--table', default=default_table, show_default=True, help=table_help, required=True)
-@click.option('--dry-run', is_flag=True, default=False, show_default=True, help=dry_run_help)
-@click.option('--fake', is_flag=True, default=False, help=fake_help)
-@click.option('--steps', type=int, default=1, help=revert_steps_help, show_default=True)
-@click.option('--print-sql', is_flag=True, default=False, help=print_help)
-@click.option('--yes', '-y', is_flag=True, default=False, help=yes_help)
-@click.option('--verbose', is_flag=True, default=False)
+@click.option("--table", default=default_table, show_default=True, help=table_help, required=True)
+@click.option("--dry-run", is_flag=True, default=False, show_default=True, help=dry_run_help)
+@click.option("--fake", is_flag=True, default=False, help=fake_help)
+@click.option("--steps", type=int, default=1, help=revert_steps_help, show_default=True)
+@click.option("--print-sql", is_flag=True, default=False, help=print_help)
+@click.option("--yes", "-y", is_flag=True, default=False, help=yes_help)
+@click.option("--verbose", is_flag=True, default=False)
 def downgrade(
     *,
     database: str,
@@ -165,20 +165,20 @@ def downgrade(
     steps: int,
     verbose: int,
 ) -> None:
-    _, _, db_name = database.rpartition('/')
-    db_type, _, _ = database.partition('://')
+    _, _, db_name = database.rpartition("/")
+    db_type, _, _ = database.partition("://")
     click.secho(
-        'Downgrade {type} database {db}.'.format(
-            db=click.style(db_name, fg='cyan'),
-            type=click.style(db_type, fg='green'),
+        "Downgrade {type} database {db}.".format(
+            db=click.style(db_name, fg="cyan"),
+            type=click.style(db_type, fg="green"),
         )
     )
 
     if not yes:
         click.confirm(
-            'Database schema will be {action} by {steps} step(s). Continue?'.format(
-                action=click.style('downgraded', fg='yellow'),
-                steps=click.style(steps, fg='cyan'),
+            "Database schema will be {action} by {steps} step(s). Continue?".format(
+                action=click.style("downgraded", fg="yellow"),
+                steps=click.style(steps, fg="cyan"),
             ),
             show_default=True,
             abort=True,
@@ -191,24 +191,24 @@ def downgrade(
     except MigrationError as ex:
         if verbose:
             traceback.print_exception(ex)
-        click.echo('')
-        click.secho('-' * 30 + f' FAIL: {ex.migration.file} ' + '-' * 30, fg='red')
-        click.secho(f'Error: {ex}', fg='red')
-        click.echo('Statement, that caused error:')
+        click.echo("")
+        click.secho("-" * 30 + f" FAIL: {ex.migration.file} " + "-" * 30, fg="red")
+        click.secho(f"Error: {ex}", fg="red")
+        click.echo("Statement, that caused error:")
         click.echo(colorize_sql(ex.stmt))
 
 
 @app.command
 @click.option(
-    '-m',
-    '--migrations',
+    "-m",
+    "--migrations",
     default=default_dir,
     type=click.Path(file_okay=False, dir_okay=True),
     show_default=True,
     required=True,
     help=migrations_help,
 )
-@click.argument('name', default='unnamed')
+@click.argument("name", default="unnamed")
 def new(
     *,
     migrations: str,
@@ -216,21 +216,21 @@ def new(
 ) -> None:
     path = create_migration_template(migrations, name)
     filename = os.path.basename(path)
-    click.secho('Created migration %s.' % click.style(filename, bold=True))
+    click.secho("Created migration %s." % click.style(filename, bold=True))
 
 
 @app.command
 @click.option(
-    '-m',
-    '--migrations',
+    "-m",
+    "--migrations",
     default=default_dir,
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
     show_default=True,
     required=True,
     help=migrations_help,
 )
-@click.option('--table', default=default_table, show_default=True, help=table_help, required=True)
-@click.option('-d', '--database', help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
+@click.option("--table", default=default_table, show_default=True, help=table_help, required=True)
+@click.option("-d", "--database", help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
 def status(
     *,
     database: str,
@@ -246,9 +246,9 @@ def status(
     for migration in history:
         has_entries = True
         click.secho(
-            '{status} {filename}'.format(
+            "{status} {filename}".format(
                 status=(
-                    click.style('Applied', fg='green') if migration.applied else click.style('Pending', fg='yellow')
+                    click.style("Applied", fg="green") if migration.applied else click.style("Pending", fg="yellow")
                 ),
                 filename=os.path.basename(migration.filename),
             )
@@ -262,5 +262,5 @@ def main() -> None:
     app()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

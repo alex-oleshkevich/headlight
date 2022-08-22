@@ -8,7 +8,7 @@ from headlight.schema import types
 
 
 class PgDriver(DbDriver):
-    placeholder_mark = '%s'
+    placeholder_mark = "%s"
 
     def __init__(self, url: str) -> None:
         self.conn = psycopg2.connect(url)
@@ -30,83 +30,83 @@ class PgDriver(DbDriver):
     def get_sql_for_type(self, type: types.Type) -> str:
         match type:
             case types.SmallIntegerType(auto_increment=auto_increment):
-                return 'SMALLSERIAL' if auto_increment else 'SMALLINT'
+                return "SMALLSERIAL" if auto_increment else "SMALLINT"
             case types.IntegerType(auto_increment=auto_increment):
-                return 'SERIAL' if auto_increment else 'INTEGER'
+                return "SERIAL" if auto_increment else "INTEGER"
             case types.BigIntegerType(auto_increment=auto_increment):
-                return 'BIGSERIAL' if auto_increment else 'BIGINT'
+                return "BIGSERIAL" if auto_increment else "BIGINT"
             case types.RealType():
-                return 'REAL'
+                return "REAL"
             case types.DoubleType():
-                return 'DOUBLE PRECISION'
+                return "DOUBLE PRECISION"
             case types.FloatType(precision=precision):
-                return f'FLOAT({precision})' if precision is not None else 'FLOAT'
+                return f"FLOAT({precision})" if precision is not None else "FLOAT"
             case types.NumericType(precision=precision, scale=scale):
                 if precision is not None and scale is not None:
-                    return f'NUMERIC({precision}, {scale})'
+                    return f"NUMERIC({precision}, {scale})"
                 elif precision is not None:
-                    return f'NUMERIC({precision})'
+                    return f"NUMERIC({precision})"
                 else:
-                    return 'NUMERIC'
+                    return "NUMERIC"
             case types.MoneyType():
-                return 'MONEY'
+                return "MONEY"
             case types.CharType(length=length):
-                return f'CHAR({length})'
+                return f"CHAR({length})"
             case types.VarCharType(length=length):
-                return f'VARCHAR({length})' if length else 'VARCHAR'
+                return f"VARCHAR({length})" if length else "VARCHAR"
             case types.TextType():
-                return 'TEXT'
+                return "TEXT"
             case types.BytesType():
-                return 'BYTEA'
+                return "BYTEA"
             case types.DateTimeType(tz=tz, precision=precision):
-                return 'TIMESTAMP{precision}{timezone}'.format(
-                    precision=f'({precision})' if precision else '',
-                    timezone=' WITH TIME ZONE' if tz else '',
+                return "TIMESTAMP{precision}{timezone}".format(
+                    precision=f"({precision})" if precision else "",
+                    timezone=" WITH TIME ZONE" if tz else "",
                 )
             case types.DateType():
-                return 'DATE'
+                return "DATE"
             case types.TimeType(tz=tz, precision=precision):
-                return 'TIME{precision}{timezone}'.format(
-                    precision=f'({precision})' if precision else '',
-                    timezone=' WITH TIME ZONE' if tz else '',
+                return "TIME{precision}{timezone}".format(
+                    precision=f"({precision})" if precision else "",
+                    timezone=" WITH TIME ZONE" if tz else "",
                 )
             case types.IntervalType(fields=fields, precision=precision):
-                return 'INTERVAL{fields}{precision}'.format(
-                    fields=f" {fields}" if fields else '',
-                    precision=f'({precision})' if precision else '',
+                return "INTERVAL{fields}{precision}".format(
+                    fields=f" {fields}" if fields else "",
+                    precision=f"({precision})" if precision else "",
                 )
             case types.BooleanType():
-                return 'BOOLEAN'
+                return "BOOLEAN"
             case types.PointType():
-                return 'POINT'
+                return "POINT"
             case types.LineType():
-                return 'LINE'
+                return "LINE"
             case types.LsegType():
-                return 'LSEG'
+                return "LSEG"
             case types.BoxType():
-                return 'BOX'
+                return "BOX"
             case types.PathType():
-                return 'PATH'
+                return "PATH"
             case types.PolygonType():
-                return 'POLYGON'
+                return "POLYGON"
             case types.CircleType():
-                return 'CIRCLE'
+                return "CIRCLE"
             case types.CIDRType():
-                return 'CIDR'
+                return "CIDR"
             case types.InetType():
-                return 'INET'
+                return "INET"
             case types.MacAddrType():
-                return 'MACADDR'
+                return "MACADDR"
             case types.MacAddr8Type():
-                return 'MACADDR8'
+                return "MACADDR8"
             case types.JSONType():
-                return 'JSONB'
+                return "JSONB"
             case types.JSONType():
-                return 'JSONB'
+                return "JSONB"
             case types.ArrayType(type_=type_):
                 type_sql = self.get_sql_for_type(type_)
-                return f'{type_sql}[]'
+                return f"{type_sql}[]"
             case types.UUIDType():
-                return 'UUID'
+                return "UUID"
 
-        raise ValueError(f'Cannot generate SQL for type: {type:r}')
+        raise ValueError(f"Cannot generate SQL for type: {type:r}")

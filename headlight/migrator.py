@@ -52,7 +52,7 @@ class Migration:
         mod = importlib.import_module(py_module)
         filename = os.path.basename(typing.cast(str, mod.__file__))
         revision = filename[:15]
-        name, _, _ = filename[16:].rpartition('.')
+        name, _, _ = filename[16:].rpartition(".")
 
         schema = Blueprint()
         mod.migrate(schema)
@@ -62,7 +62,7 @@ class Migration:
             file=filename,
             revision=revision,
             ops=schema.get_ops(),
-            transactional=getattr(mod, 'transactional', True),
+            transactional=getattr(mod, "transactional", True),
         )
 
 
@@ -86,7 +86,7 @@ class MigrateHooks:
 
 
 class Migrator:
-    def __init__(self, url: str, directory: str, table_name: str = 'migrations') -> None:
+    def __init__(self, url: str, directory: str, table_name: str = "migrations") -> None:
         self.db = create_database(url)
         self.directory = directory
         self.table = table_name
@@ -96,14 +96,14 @@ class Migrator:
 
     def get_migrations(self) -> list[Migration]:
         sys.path.insert(0, self.directory)
-        migration_files = glob.glob(f'{self.directory}/*.py')
+        migration_files = glob.glob(f"{self.directory}/*.py")
         return [
-            Migration.from_py_module(os.path.basename(py_module.replace('.py', '')))
+            Migration.from_py_module(os.path.basename(py_module.replace(".py", "")))
             for py_module in sorted(migration_files)
         ]
 
     def get_applied_migrations(self, limit: int | None = None) -> dict[str, AppliedMigration]:
-        return {am['revision']: am for am in self.db.get_applied_migrations(self.table, limit)}
+        return {am["revision"]: am for am in self.db.get_applied_migrations(self.table, limit)}
 
     def get_pending_migrations(self) -> list[Migration]:
         applied = self.get_applied_migrations()
@@ -151,7 +151,7 @@ class Migrator:
         tx = self.db.transaction() if migration.transactional else DummyTransaction(self.db)
         start_time = time.time()
         hooks = hooks or MigrateHooks()
-        current_stmt = ''
+        current_stmt = ""
         try:
             with tx, self.db.lock(self.table):
                 hooks.before_migrate(migration)
@@ -159,13 +159,13 @@ class Migrator:
                 if not upgrade:
                     stmts = list(reversed(stmts))
 
-                sql = ';\n'.join(stmts) + ';'
+                sql = ";\n".join(stmts) + ";"
                 if print_sql:
-                    writer.write('\n')
-                    writer.write(colorize_sql(f'-- rev. {migration.revision} from {migration.file}'))
+                    writer.write("\n")
+                    writer.write(colorize_sql(f"-- rev. {migration.revision} from {migration.file}"))
                     writer.write(colorize_sql(sql))
-                    writer.write(colorize_sql(f'-- end rev. {migration.revision}'))
-                    writer.write('\n')
+                    writer.write(colorize_sql(f"-- end rev. {migration.revision}"))
+                    writer.write("\n")
 
                 if not dry_run:
                     if not fake:
@@ -200,19 +200,19 @@ def create_migration_template(directory: str, name: str) -> str:
     base_dir = os.path.abspath(directory)
     os.makedirs(base_dir, exist_ok=True)
 
-    name = name or 'unnamed'
+    name = name or "unnamed"
     now = datetime.datetime.now()
-    revision = now.strftime('%Y%m%d_%H%M%S')
+    revision = now.strftime("%Y%m%d_%H%M%S")
     filename = f'{revision}_{name.replace(" ", "_").lower()}.py'
     path = os.path.join(base_dir, filename)
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         f.write(
             MIGRATION_TEMPLATE.format(
                 name=name,
                 revision=revision,
                 author=getpass.getuser(),
                 date=now.isoformat(),
-                transactional='True',
+                transactional="True",
             ).strip()
         )
     return path

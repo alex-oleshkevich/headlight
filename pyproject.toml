@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "headlight"
 description = "A database migration toolkit."
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Alex Oleshkevich <alex.oleshkevich@gmail.com>"]
 license = "MIT"
 readme = "README.md"
@@ -47,7 +47,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 target-version = ["py310"]
-skip-string-normalization = true
 line_length = 120
 extend-exclude = true
 exclude = '''
