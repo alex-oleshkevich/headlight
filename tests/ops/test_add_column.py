@@ -8,7 +8,7 @@ column = Column(
     type=types.VarCharType(),
     collate="german",
     null=True,
-    default="root@localhost",
+    default="'root@localhost'",
     primary_key=True,
     unique_constraint=UniqueConstraint(name="email_udx"),
     check_constraints=[

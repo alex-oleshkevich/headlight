@@ -251,7 +251,7 @@ class Column:
             type=driver.get_sql_for_type(self.type),
             pk=" PRIMARY KEY" if self.primary_key else "",
             collate=f' COLLATE "{self.collate}"' if self.collate else "",
-            default=f" DEFAULT '{self.default}'" if self.default is not None else "",
+            default=f" DEFAULT {self.default}" if self.default is not None else "",
             foreign=f" {self.foreign_key.compile(driver)}" if self.foreign_key else "",
             generated_as=f" {self.generated_as_.compile(driver)}" if self.generated_as_ else "",
             unique=f" {self.unique_constraint.compile(driver)}" if self.unique_constraint else "",

@@ -35,11 +35,11 @@ class CreateTableBuilder:
     def add_timestamps(
         self, created_name: str = "created_at", updated_name: str = "updated_at", tz: bool = True
     ) -> None:
-        self.add_column(created_name, types.DateTimeType(tz), null=False, default="now()")
+        self.add_column(created_name, types.DateTimeType(tz), null=False, default="current_timestamp()")
         self.add_column(updated_name, types.DateTimeType(tz), null=True)
 
     def add_created_timestamp(self, created_name: str = "created_at", tz: bool = True) -> None:
-        self.add_column(created_name, types.DateTimeType(tz), null=False, default="now()")
+        self.add_column(created_name, types.DateTimeType(tz), null=False, default="current_timestamp()")
 
     def add_column(
         self,

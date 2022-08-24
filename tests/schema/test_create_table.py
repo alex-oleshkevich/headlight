@@ -54,7 +54,7 @@ def test_add_timestamps() -> None:
     builder.add_timestamps()
     match builder._table.columns:
         case [
-            Column(type=types.DateTimeType(tz=True), name="created_at", null=False, default="now()"),
+            Column(type=types.DateTimeType(tz=True), name="created_at", null=False, default="current_timestamp()"),
             Column(type=types.DateTimeType(tz=True), name="updated_at", null=True),
         ]:
             assert True
@@ -67,7 +67,7 @@ def test_add_created_timestamp() -> None:
     builder.add_created_timestamp()
     match builder._table.columns:
         case [
-            Column(type=types.DateTimeType(tz=True), name="created_at", null=False, default="now()"),
+            Column(type=types.DateTimeType(tz=True), name="created_at", null=False, default="current_timestamp()"),
         ]:
             assert True
         case _:

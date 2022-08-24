@@ -257,7 +257,7 @@ class SetDefaultOp(Operation):
             table=self.table_name,
             name=self.column_name,
             only=" ONLY" if self.only else "",
-            expr=f"'{self.new_default}'",
+            expr=f"{self.new_default}",
             if_table_exists=" IF EXISTS" if self.if_table_exists else "",
         )
 

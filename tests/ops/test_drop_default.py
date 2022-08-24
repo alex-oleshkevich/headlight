@@ -6,7 +6,7 @@ def test_op_forward(postgres: DbDriver) -> None:
     sql = DropDefaultOp(
         table_name="users",
         column_name="name",
-        current_default="user",
+        current_default="'user'",
         only=True,
         if_table_exists=True,
     ).to_up_sql(postgres)
@@ -18,7 +18,7 @@ def test_op_reverse(postgres: DbDriver) -> None:
     sql = DropDefaultOp(
         table_name="users",
         column_name="name",
-        current_default="root",
+        current_default="'root'",
         only=True,
         if_table_exists=True,
     ).to_down_sql(postgres)
