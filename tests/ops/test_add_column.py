@@ -94,7 +94,7 @@ def test_op_check_helper(postgres: DbDriver) -> None:
         .to_up_sql(postgres)
     )
 
-    assert sql == ("ALTER TABLE users " "ADD email VARCHAR NOT NULL " "CONSTRAINT check1 CHECK (email is not null)")
+    assert sql == "ALTER TABLE users ADD email VARCHAR NOT NULL CONSTRAINT check1 CHECK (email is not null)"
 
 
 def test_op_unique_helper(postgres: DbDriver) -> None:
@@ -110,7 +110,7 @@ def test_op_unique_helper(postgres: DbDriver) -> None:
         .to_up_sql(postgres)
     )
 
-    assert sql == ("ALTER TABLE users " "ADD email VARCHAR NOT NULL UNIQUE")
+    assert sql == "ALTER TABLE users ADD email VARCHAR NOT NULL UNIQUE"
 
 
 def test_op_references_helper(postgres: DbDriver) -> None:
@@ -126,7 +126,7 @@ def test_op_references_helper(postgres: DbDriver) -> None:
         .to_up_sql(postgres)
     )
 
-    assert sql == ("ALTER TABLE users " "ADD email VARCHAR NOT NULL REFERENCES profiles (id)")
+    assert sql == "ALTER TABLE users ADD email VARCHAR NOT NULL REFERENCES profiles (id)"
 
 
 def test_op_generated_as_helper(postgres: DbDriver) -> None:
@@ -142,4 +142,17 @@ def test_op_generated_as_helper(postgres: DbDriver) -> None:
         .to_up_sql(postgres)
     )
 
-    assert sql == ("ALTER TABLE users " "ADD email VARCHAR NOT NULL GENERATED ALWAYS AS (first_name || '-new') STORED")
+    assert sql == ("ALTER TABLE users ADD email VARCHAR NOT NULL GENERATED ALWAYS AS (first_name || '-new') STORED")
+
+
+def test_op_quotes_empty_string(postgres: DbDriver) -> None:
+    sql = AddColumnOp(
+        table_name="users",
+        column=Column(
+            name="email",
+            type=types.VarCharType(),
+            default="",
+        ),
+    ).to_up_sql(postgres)
+
+    assert sql == "ALTER TABLE users ADD email VARCHAR NOT NULL DEFAULT ''"

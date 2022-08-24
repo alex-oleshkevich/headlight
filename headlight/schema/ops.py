@@ -4,7 +4,17 @@ import abc
 
 from headlight.drivers.base import DbDriver
 from headlight.exceptions import HeadlightError
-from headlight.schema.schema import Action, Column, Constraint, DropMode, Index, MatchType, PrimaryKeyConstraint, Table
+from headlight.schema.schema import (
+    Action,
+    Column,
+    Constraint,
+    DropMode,
+    Index,
+    MatchType,
+    PrimaryKeyConstraint,
+    Table,
+    make_default,
+)
 from headlight.schema.types import Type
 
 
@@ -248,8 +258,8 @@ class SetDefaultOp(Operation):
         self.only = only
         self.table_name = table_name
         self.column_name = column_name
-        self.new_default = new_default
-        self.old_default = current_default
+        self.new_default = make_default(new_default)
+        self.old_default = make_default(current_default)
         self.if_table_exists = if_table_exists
 
     def to_up_sql(self, driver: DbDriver) -> str:
@@ -292,7 +302,7 @@ class DropDefaultOp(Operation):
         self.only = only
         self.table_name = table_name
         self.column_name = column_name
-        self.old_default = current_default
+        self.old_default = make_default(current_default)
         self.if_table_exists = if_table_exists
 
     def to_up_sql(self, driver: DbDriver) -> str:

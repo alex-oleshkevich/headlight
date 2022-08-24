@@ -88,3 +88,16 @@ def test_op_reverse(postgres: DbDriver) -> None:
     ).to_down_sql(postgres)
 
     assert sql == "DROP TABLE users"
+
+
+def test_op_quotes_empty_string(postgres: DbDriver) -> None:
+    sql = CreateTableOp(
+        table=Table(
+            name="users",
+            columns=[
+                Column("name", type=types.VarCharType(), default=""),
+            ],
+        )
+    ).to_up_sql(postgres)
+
+    assert sql == ("CREATE TABLE users (\n" "    name VARCHAR NOT NULL DEFAULT ''\n" ")")

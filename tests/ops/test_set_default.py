@@ -34,3 +34,8 @@ def test_op_when_current_default_is_unset(postgres: DbDriver) -> None:
 
     reverse_sql = SetDefaultOp(table_name="users", column_name="name", new_default="'root'").to_down_sql(postgres)
     assert reverse_sql == "ALTER TABLE users ALTER name DROP DEFAULT"
+
+
+def test_op_uses_quotes_empty_string(postgres: DbDriver) -> None:
+    forward_sql = SetDefaultOp(table_name="users", column_name="name", new_default="").to_up_sql(postgres)
+    assert forward_sql == "ALTER TABLE users ALTER name SET DEFAULT ''"
