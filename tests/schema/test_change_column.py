@@ -1,5 +1,6 @@
 from headlight.schema import ops, types
 from headlight.schema.builder import ChangeColumn
+from headlight.schema.schema import Default
 
 
 def test_set_null() -> None:
@@ -30,7 +31,12 @@ def test_set_default() -> None:
 
     match builder._ops[0]:
         case ops.SetDefaultOp(
-            new_default="new", old_default="old", table_name="users", column_name="id", only=True, if_table_exists=True
+            new_default=Default(value="new"),
+            old_default=Default(value="old"),
+            table_name="users",
+            column_name="id",
+            only=True,
+            if_table_exists=True,
         ):
             assert True
         case _:
@@ -43,7 +49,7 @@ def test_drop_default() -> None:
 
     match builder._ops[0]:
         case ops.DropDefaultOp(
-            old_default="old", table_name="users", column_name="id", only=True, if_table_exists=True
+            old_default=Default(value="old"), table_name="users", column_name="id", only=True, if_table_exists=True
         ):
             assert True
         case _:

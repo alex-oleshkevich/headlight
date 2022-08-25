@@ -170,7 +170,7 @@ class Column:
     name: str
     type: types.Type
     null: bool = False
-    default: str | None = None
+    default: Default | None = None
     primary_key: bool = False
     collate: str | None = None
     foreign_key: ForeignKey | None = None
@@ -251,7 +251,9 @@ class Column:
             type=driver.get_sql_for_type(self.type),
             pk=" PRIMARY KEY" if self.primary_key else "",
             collate=f' COLLATE "{self.collate}"' if self.collate else "",
-            default=f" DEFAULT {make_default(self.default)}" if self.default is not None else "",
+            default=f" DEFAULT {self.default.compile(driver)}"
+            if self.default is not None and self.default.value is not None
+            else "",
             foreign=f" {self.foreign_key.compile(driver)}" if self.foreign_key else "",
             generated_as=f" {self.generated_as_.compile(driver)}" if self.generated_as_ else "",
             unique=f" {self.unique_constraint.compile(driver)}" if self.unique_constraint else "",
@@ -283,7 +285,48 @@ class Table:
     indices: list[Index] = dataclasses.field(default_factory=list)
 
 
-def make_default(default: str) -> str:
-    if default == "":
-        return "''"
-    return default
+class Expr:
+    def __init__(self, expr: str) -> None:
+        self.value = expr
+
+    def compile(self, _: DbDriver) -> str:
+        return self.value
+
+
+class NowExpr(Expr):
+    def __init__(self) -> None:
+        super().__init__("CURRENT_TIMESTAMP")
+
+
+class ExprFactory:
+    def now(self) -> Expr:
+        return NowExpr()
+
+
+expr = ExprFactory()
+
+
+class Default:
+    def __init__(self, value: str | Expr | None) -> None:
+        self.value = value
+
+    def compile(self, driver: DbDriver) -> str:
+        match self.value:
+            case True | False:
+                return "'t'" if self.value else "'f'"
+            case "":
+                return "''"
+            case []:
+                return "'[]'"
+            case {}:
+                return "'{}'"
+            case None:
+                return "NULL"
+            case Expr():
+                return self.value.compile(driver)
+            case _:
+                return f"'{self.value}'"
+
+    @classmethod
+    def new(cls, value: str | Default | None) -> Default:
+        return value if isinstance(value, Default) else Default(value)

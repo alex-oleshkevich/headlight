@@ -1,14 +1,14 @@
 from headlight import DbDriver
 from headlight.schema import types
 from headlight.schema.ops import AddColumnOp
-from headlight.schema.schema import CheckConstraint, Column, ForeignKey, GeneratedAs, UniqueConstraint
+from headlight.schema.schema import CheckConstraint, Column, Default, ForeignKey, GeneratedAs, UniqueConstraint
 
 column = Column(
     name="email",
     type=types.VarCharType(),
     collate="german",
     null=True,
-    default="'root@localhost'",
+    default=Default("root@localhost"),
     primary_key=True,
     unique_constraint=UniqueConstraint(name="email_udx"),
     check_constraints=[
@@ -151,7 +151,7 @@ def test_op_quotes_empty_string(postgres: DbDriver) -> None:
         column=Column(
             name="email",
             type=types.VarCharType(),
-            default="",
+            default=Default(""),
         ),
     ).to_up_sql(postgres)
 

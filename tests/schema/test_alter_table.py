@@ -3,6 +3,7 @@ from headlight.schema.builder import AlterTableBuilder, ChangeColumn
 from headlight.schema.schema import (
     CheckConstraint,
     Column,
+    Default,
     ForeignKey,
     GeneratedAs,
     PrimaryKeyConstraint,
@@ -34,7 +35,7 @@ def test_add_column() -> None:
                 name="id",
                 null=True,
                 primary_key=True,
-                default="default",
+                default=Default(value="default"),
                 collate="belarusian",
                 unique_constraint=UniqueConstraint(),
                 check_constraints=[CheckConstraint(expr="id > 0")],

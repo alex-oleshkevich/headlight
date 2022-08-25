@@ -195,6 +195,12 @@ class Migrator:
                 applied=migration.revision in applied,
             )
 
+    @classmethod
+    def new(cls, database_url: str, directory: str = "migrations", table_name: str = "migrations") -> Migrator:
+        migrator = Migrator(url=database_url, directory=directory, table_name=table_name)
+        migrator.initialize_db()
+        return migrator
+
 
 def create_migration_template(directory: str, name: str) -> str:
     base_dir = os.path.abspath(directory)

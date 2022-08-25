@@ -8,12 +8,13 @@ from headlight.schema.schema import (
     Action,
     Column,
     Constraint,
+    Default,
     DropMode,
+    Expr,
     Index,
     MatchType,
     PrimaryKeyConstraint,
     Table,
-    make_default,
 )
 from headlight.schema.types import Type
 
@@ -250,16 +251,16 @@ class SetDefaultOp(Operation):
         self,
         table_name: str,
         column_name: str,
-        new_default: str,
-        current_default: str | None = None,
+        new_default: str | Default | Expr,
+        current_default: str | Default | Expr | None = None,
         only: bool = False,
         if_table_exists: bool = False,
     ) -> None:
         self.only = only
         self.table_name = table_name
         self.column_name = column_name
-        self.new_default = make_default(new_default)
-        self.old_default = make_default(current_default)
+        self.new_default = Default.new(new_default)
+        self.old_default = Default.new(current_default)
         self.if_table_exists = if_table_exists
 
     def to_up_sql(self, driver: DbDriver) -> str:
@@ -267,12 +268,12 @@ class SetDefaultOp(Operation):
             table=self.table_name,
             name=self.column_name,
             only=" ONLY" if self.only else "",
-            expr=f"{self.new_default}",
+            expr=f"{self.new_default.compile(driver)}",
             if_table_exists=" IF EXISTS" if self.if_table_exists else "",
         )
 
     def to_down_sql(self, driver: DbDriver) -> str:
-        if self.old_default is None:
+        if self.old_default.value is None:
             return DropDefaultOp(
                 table_name=self.table_name,
                 column_name=self.column_name,
@@ -295,14 +296,14 @@ class DropDefaultOp(Operation):
         self,
         table_name: str,
         column_name: str,
-        current_default: str | None = None,
+        current_default: str | Default | Expr | None = None,
         only: bool = False,
         if_table_exists: bool = False,
     ) -> None:
         self.only = only
         self.table_name = table_name
         self.column_name = column_name
-        self.old_default = make_default(current_default)
+        self.old_default = Default.new(current_default)
         self.if_table_exists = if_table_exists
 
     def to_up_sql(self, driver: DbDriver) -> str:
@@ -314,7 +315,7 @@ class DropDefaultOp(Operation):
         )
 
     def to_down_sql(self, driver: DbDriver) -> str:
-        if self.old_default is None:  # column had no default previously
+        if self.old_default.value is None:  # column had no default previously
             return "-- noop, column had no default previously"
         return SetDefaultOp(
             table_name=self.table_name,

@@ -10,7 +10,9 @@ from headlight.schema.schema import (
     CheckConstraint,
     Column,
     Constraint,
+    Default,
     DropMode,
+    Expr,
     ForeignKey,
     GeneratedAs,
     Index,
@@ -19,6 +21,7 @@ from headlight.schema.schema import (
     PrimaryKeyConstraint,
     Table,
     UniqueConstraint,
+    expr,
 )
 
 
@@ -35,18 +38,18 @@ class CreateTableBuilder:
     def add_timestamps(
         self, created_name: str = "created_at", updated_name: str = "updated_at", tz: bool = True
     ) -> None:
-        self.add_column(created_name, types.DateTimeType(tz), null=False, default="current_timestamp()")
+        self.add_column(created_name, types.DateTimeType(tz), null=False, default=expr.now())
         self.add_column(updated_name, types.DateTimeType(tz), null=True)
 
     def add_created_timestamp(self, created_name: str = "created_at", tz: bool = True) -> None:
-        self.add_column(created_name, types.DateTimeType(tz), null=False, default="current_timestamp()")
+        self.add_column(created_name, types.DateTimeType(tz), null=False, default=expr.now())
 
     def add_column(
         self,
         name: str,
         type: types.Type | typing.Type[types.Type],
         null: bool = False,
-        default: str | None = None,
+        default: typing.Any = None,
         primary_key: bool = False,
         unique: UniqueConstraint | bool | str | None = None,
         checks: list[CheckConstraint | str | tuple[str, str]] | None = None,
@@ -60,7 +63,7 @@ class CreateTableBuilder:
             name=name,
             type=column_type,
             null=null,
-            default=default,
+            default=Default.new(default),
             primary_key=primary_key,
             generated_as_=generated_as,
             check_constraints=check_constraints,
@@ -153,25 +156,27 @@ class ChangeColumn:
         self._if_table_exists = if_table_exists
         self._ops = ops
 
-    def set_default(self, new_default: str, current_default: str | None) -> ChangeColumn:
+    def set_default(
+        self, new_default: str | Default | Expr, current_default: str | Default | Expr | None
+    ) -> ChangeColumn:
         self._ops.append(
             ops.SetDefaultOp(
                 table_name=self._table_name,
                 column_name=self._column_name,
-                new_default=new_default,
-                current_default=current_default,
+                new_default=Default.new(new_default),
+                current_default=Default.new(current_default),
                 only=self._only,
                 if_table_exists=self._if_table_exists,
             )
         )
         return self
 
-    def drop_default(self, current_default: str | None) -> ChangeColumn:
+    def drop_default(self, current_default: str | Default | Expr | None) -> ChangeColumn:
         self._ops.append(
             ops.DropDefaultOp(
                 table_name=self._table_name,
                 column_name=self._column_name,
-                current_default=current_default,
+                current_default=Default.new(current_default),
                 only=self._only,
                 if_table_exists=self._if_table_exists,
             )
@@ -241,7 +246,7 @@ class AlterTableBuilder:
         type: types.Type | typing.Type[types.Type],
         null: bool = False,
         primary_key: bool | None = None,
-        default: str | None = None,
+        default: str | Default | Expr | None = None,
         unique: bool | UniqueConstraint | None = None,
         checks: list[CheckConstraint | str | tuple[str, str]] | None = None,
         if_table_exists: bool = False,
@@ -264,7 +269,7 @@ class AlterTableBuilder:
                 check_constraints=check_constraints,
                 collate=collate,
                 null=null,
-                default=default,
+                default=Default.new(default),
                 primary_key=primary_key,
                 generated_as_=GeneratedAs.new(generated_as) if generated_as else None,
             ),

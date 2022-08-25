@@ -3,9 +3,11 @@ from headlight.schema.builder import CreateTableBuilder
 from headlight.schema.schema import (
     CheckConstraint,
     Column,
+    Default,
     ForeignKey,
     GeneratedAs,
     Index,
+    NowExpr,
     PrimaryKeyConstraint,
     UniqueConstraint,
 )
@@ -28,7 +30,7 @@ def test_add_column() -> None:
             name="id",
             type=types.BigIntegerType(),
             null=True,
-            default="1",
+            default=Default(value="1"),
             primary_key=True,
             unique_constraint=UniqueConstraint(),
             check_constraints=[CheckConstraint(expr="id > 0")],
@@ -54,7 +56,7 @@ def test_add_timestamps() -> None:
     builder.add_timestamps()
     match builder._table.columns:
         case [
-            Column(type=types.DateTimeType(tz=True), name="created_at", null=False, default="current_timestamp()"),
+            Column(type=types.DateTimeType(tz=True), name="created_at", null=False, default=Default(value=NowExpr())),
             Column(type=types.DateTimeType(tz=True), name="updated_at", null=True),
         ]:
             assert True
@@ -67,7 +69,7 @@ def test_add_created_timestamp() -> None:
     builder.add_created_timestamp()
     match builder._table.columns:
         case [
-            Column(type=types.DateTimeType(tz=True), name="created_at", null=False, default="current_timestamp()"),
+            Column(type=types.DateTimeType(tz=True), name="created_at", null=False, default=Default(value=NowExpr())),
         ]:
             assert True
         case _:

@@ -4,6 +4,7 @@ from headlight.schema.ops import CreateTableOp
 from headlight.schema.schema import (
     CheckConstraint,
     Column,
+    Default,
     Index,
     IndexExpr,
     PrimaryKeyConstraint,
@@ -95,7 +96,7 @@ def test_op_quotes_empty_string(postgres: DbDriver) -> None:
         table=Table(
             name="users",
             columns=[
-                Column("name", type=types.VarCharType(), default=""),
+                Column("name", type=types.VarCharType(), default=Default("")),
             ],
         )
     ).to_up_sql(postgres)

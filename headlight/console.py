@@ -1,8 +1,10 @@
 import click
+import contextlib
 import os
 import pathlib
-import tomli
+import tomlkit
 import traceback
+import typing
 
 from headlight.migrator import MigrateHooks, Migration, MigrationError, Migrator, create_migration_template
 from headlight.utils import colorize_sql
@@ -49,11 +51,31 @@ class LoggingHooks(MigrateHooks):
         )
 
 
+@contextlib.contextmanager
+def catch_errors(verbose: bool) -> typing.Iterable[None]:
+    try:
+        yield
+    except MigrationError as ex:
+        if verbose:
+            traceback.print_exception(ex)
+        click.echo("")
+        click.secho("-" * 30 + f" FAIL: {ex.migration.file} " + "-" * 30, fg="red")
+        click.secho(f"Error: {ex}", fg="red")
+        click.echo("Statement, that caused error:")
+        click.echo(colorize_sql(ex.stmt))
+
+
+def parse_db_info(database_url: str) -> tuple[str, str]:
+    _, _, db_name = database_url.rpartition("/")
+    db_type, _, _ = database_url.partition("://")
+    return db_type, db_type
+
+
 def get_config_from_pyproject() -> dict[str, str]:
     for dir in pathlib.Path(__file__).parents:
         pyproject = dir / "pyproject.toml"
         if pyproject.exists():
-            config = tomli.loads(pyproject.read_text())
+            config = tomlkit.loads(pyproject.read_text())
             return config.get("tool", {}).get("headlight", {})
     return {}
 
@@ -99,8 +121,7 @@ def upgrade(
     yes: bool,
     verbose: bool,
 ) -> None:
-    _, _, db_name = database.rpartition("/")
-    db_type, _, _ = database.partition("://")
+    db_type, db_name = parse_db_info(database)
     click.secho(
         "Upgrade {type} database {db}.".format(
             db=click.style(db_name, fg="cyan"),
@@ -108,8 +129,7 @@ def upgrade(
         )
     )
 
-    migrator = Migrator(database, migrations, table)
-    migrator.initialize_db()
+    migrator = Migrator.new(database, migrations, table)
     pending_count = len(migrator.get_pending_migrations())
     if not pending_count:
         return click.echo("No pending migration(s).")
@@ -123,16 +143,8 @@ def upgrade(
             abort=True,
         )
 
-    try:
+    with catch_errors(verbose):
         migrator.upgrade(fake=fake, dry_run=dry_run, print_sql=print_sql, hooks=LoggingHooks())
-    except MigrationError as ex:
-        if verbose:
-            traceback.print_exception(ex)
-        click.echo("")
-        click.secho("-" * 30 + f" FAIL: {ex.migration.file} " + "-" * 30, fg="red")
-        click.secho(f"Error: {ex}", fg="red")
-        click.echo("Statement, that caused error:")
-        click.echo(colorize_sql(ex.stmt))
 
 
 @app.command()
@@ -163,10 +175,9 @@ def downgrade(
     print_sql: bool,
     yes: bool,
     steps: int,
-    verbose: int,
+    verbose: bool,
 ) -> None:
-    _, _, db_name = database.rpartition("/")
-    db_type, _, _ = database.partition("://")
+    db_type, db_name = parse_db_info(database)
     click.secho(
         "Downgrade {type} database {db}.".format(
             db=click.style(db_name, fg="cyan"),
@@ -184,18 +195,51 @@ def downgrade(
             abort=True,
         )
 
-    migrator = Migrator(database, migrations, table)
-    migrator.initialize_db()
-    try:
+    with catch_errors(verbose):
+        migrator = Migrator.new(database, migrations, table)
         migrator.downgrade(dry_run=dry_run, fake=fake, steps=steps, print_sql=print_sql, hooks=LoggingHooks())
-    except MigrationError as ex:
-        if verbose:
-            traceback.print_exception(ex)
-        click.echo("")
-        click.secho("-" * 30 + f" FAIL: {ex.migration.file} " + "-" * 30, fg="red")
-        click.secho(f"Error: {ex}", fg="red")
-        click.echo("Statement, that caused error:")
-        click.echo(colorize_sql(ex.stmt))
+
+
+@app.command()
+@click.option("-d", "--database", help=database_help, envvar=DATABASE_ENVVAR, required=True, default=default_db)
+@click.option(
+    "-m",
+    "--migrations",
+    default=default_dir,
+    type=click.Path(file_okay=False, dir_okay=True, resolve_path=True),
+    show_default=True,
+    required=True,
+    help=migrations_help,
+)
+@click.option("--table", default=default_table, show_default=True, help=table_help, required=True)
+@click.option("--yes", "-y", is_flag=True, default=False, help=yes_help)
+@click.option("--verbose", is_flag=True, default=False)
+def reset(
+    *,
+    database: str,
+    migrations: str,
+    table: str,
+    yes: bool,
+    verbose: bool,
+) -> None:
+    db_type, db_name = parse_db_info(database)
+    click.secho(
+        "Resetting {type} database {db}.".format(
+            db=click.style(db_name, fg="cyan"),
+            type=click.style(db_type, fg="green"),
+        )
+    )
+
+    if not yes:
+        click.confirm(
+            "Database schema will be reset. All relations will be dropped. Continue?",
+            show_default=True,
+            abort=True,
+        )
+
+    with catch_errors(verbose):
+        migrator = Migrator.new(database, migrations, table)
+        migrator.downgrade(steps=999_999, hooks=LoggingHooks())
 
 
 @app.command
@@ -238,8 +282,7 @@ def status(
     table: str,
 ) -> None:
     assert database
-    migrator = Migrator(database, migrations, table)
-    migrator.initialize_db()
+    migrator = Migrator.new(database, migrations, table)
     history = migrator.status()
     has_entries = False
 
