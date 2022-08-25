@@ -239,7 +239,7 @@ def reset(
 
     with catch_errors(verbose):
         migrator = Migrator.new(database, migrations, table)
-        migrator.downgrade(steps=999_999, hooks=LoggingHooks())
+        migrator.reset(hooks=LoggingHooks())
 
 
 @app.command

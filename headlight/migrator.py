@@ -134,8 +134,11 @@ class Migrator:
         applied = self.get_applied_migrations(steps)
         pending = [migration for migration in self.get_migrations() if migration.revision in applied]
 
-        for migration in pending:
+        for migration in reversed(sorted(pending, key=lambda x: x.revision)):
             self.apply_migration(migration, dry_run=dry_run, fake=fake, print_sql=print_sql, hooks=hooks, upgrade=False)
+
+    def reset(self, hooks: MigrateHooks | None = None) -> None:
+        self.downgrade(steps=999_999, hooks=hooks)
 
     def apply_migration(
         self,
