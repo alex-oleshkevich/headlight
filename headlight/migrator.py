@@ -100,6 +100,7 @@ class Migrator:
         return [
             Migration.from_py_module(os.path.basename(py_module.replace(".py", "")))
             for py_module in sorted(migration_files)
+            if "__init__" not in py_module
         ]
 
     def get_applied_migrations(self, limit: int | None = None) -> dict[str, AppliedMigration]:
