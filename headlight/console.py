@@ -68,7 +68,7 @@ def catch_errors(verbose: bool) -> typing.Iterable[None]:
 def parse_db_info(database_url: str) -> tuple[str, str]:
     _, _, db_name = database_url.rpartition("/")
     db_type, _, _ = database_url.partition("://")
-    return db_type, db_type
+    return db_type, db_name
 
 
 def get_config_from_pyproject() -> dict[str, str]:
