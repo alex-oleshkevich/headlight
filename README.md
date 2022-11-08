@@ -21,7 +21,11 @@ poetry add headlight
 
 ## Features
 
-- TODO
+- fluent migration builders
+- PostreSQL support (only)
+- rollback migrations
+- powerful CLI
+- command line utilities are embeddable into your Click application
 
 ## Usage
 
@@ -53,7 +57,7 @@ def migrate(schema: Blueprint) -> None:
         table.add_column('last_name', types.VarCharType(256))
         table.add_column('email', types.VarCharType(256))
         table.add_column('password', types.VarCharType(512))
-        table.add_column('active', types.BooleanType(), default='1')
+        table.add_column('active', types.BooleanType(), default=True)
         table.add_column('photo', types.VarCharType(512), null=True)
         table.add_column('deleted_at', types.DateTimeType(True), null=True)
         table.add_created_timestamp('joined_at')

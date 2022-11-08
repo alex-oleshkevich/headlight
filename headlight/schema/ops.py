@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import typing
 
 from headlight.drivers.base import DbDriver
 from headlight.exceptions import HeadlightError
@@ -10,7 +11,6 @@ from headlight.schema.schema import (
     Constraint,
     Default,
     DropMode,
-    Expr,
     Index,
     MatchType,
     PrimaryKeyConstraint,
@@ -251,8 +251,8 @@ class SetDefaultOp(Operation):
         self,
         table_name: str,
         column_name: str,
-        new_default: str | Default | Expr | bool | list | dict | None,
-        current_default: str | Default | Expr | bool | list | dict | None = None,
+        new_default: typing.Any,
+        current_default: typing.Any = None,
         only: bool = False,
         if_table_exists: bool = False,
     ) -> None:
@@ -296,7 +296,7 @@ class DropDefaultOp(Operation):
         self,
         table_name: str,
         column_name: str,
-        current_default: str | Default | Expr | None = None,
+        current_default: typing.Any = None,
         only: bool = False,
         if_table_exists: bool = False,
     ) -> None:

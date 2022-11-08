@@ -328,5 +328,5 @@ class Default:
                 return f"'{self.value}'"
 
     @classmethod
-    def new(cls, value: str | Default | Expr | bool | list | dict | None) -> Default:
+    def new(cls, value: typing.Any) -> Default:
         return value if isinstance(value, Default) else Default(value)

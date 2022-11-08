@@ -49,7 +49,7 @@ class CreateTableBuilder:
         name: str,
         type: types.Type | typing.Type[types.Type],
         null: bool = False,
-        default: str | Default | Expr | bool | list | dict | None = None,
+        default: str | int | Default | Expr | bool | list | dict | None = None,
         primary_key: bool = False,
         unique: UniqueConstraint | bool | str | None = None,
         checks: list[CheckConstraint | str | tuple[str, str]] | None = None,
@@ -156,9 +156,7 @@ class ChangeColumn:
         self._if_table_exists = if_table_exists
         self._ops = ops
 
-    def set_default(
-        self, new_default: str | Default | Expr, current_default: str | Default | Expr | None
-    ) -> ChangeColumn:
+    def set_default(self, new_default: typing.Any, current_default: typing.Any) -> ChangeColumn:
         self._ops.append(
             ops.SetDefaultOp(
                 table_name=self._table_name,
@@ -171,7 +169,7 @@ class ChangeColumn:
         )
         return self
 
-    def drop_default(self, current_default: str | Default | Expr | None) -> ChangeColumn:
+    def drop_default(self, current_default: typing.Any) -> ChangeColumn:
         self._ops.append(
             ops.DropDefaultOp(
                 table_name=self._table_name,
@@ -246,7 +244,7 @@ class AlterTableBuilder:
         type: types.Type | typing.Type[types.Type],
         null: bool = False,
         primary_key: bool = False,
-        default: str | Default | Expr | bool | list | dict | None = None,
+        default: typing.Any = None,
         unique: bool | UniqueConstraint | None = None,
         checks: list[CheckConstraint | str | tuple[str, str]] | None = None,
         if_table_exists: bool = False,
