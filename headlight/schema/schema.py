@@ -307,7 +307,7 @@ expr = ExprFactory()
 
 
 class Default:
-    def __init__(self, value: str | Expr | None) -> None:
+    def __init__(self, value: str | Default | Expr | bool | list | dict | None) -> None:
         self.value = value
 
     def compile(self, driver: DbDriver) -> str:
@@ -328,5 +328,5 @@ class Default:
                 return f"'{self.value}'"
 
     @classmethod
-    def new(cls, value: str | Default | None) -> Default:
+    def new(cls, value: str | Default | Expr | bool | list | dict | None) -> Default:
         return value if isinstance(value, Default) else Default(value)

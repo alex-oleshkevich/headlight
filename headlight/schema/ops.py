@@ -251,8 +251,8 @@ class SetDefaultOp(Operation):
         self,
         table_name: str,
         column_name: str,
-        new_default: str | Default | Expr,
-        current_default: str | Default | Expr | None = None,
+        new_default: str | Default | Expr | bool | list | dict | None,
+        current_default: str | Default | Expr | bool | list | dict | None = None,
         only: bool = False,
         if_table_exists: bool = False,
     ) -> None:

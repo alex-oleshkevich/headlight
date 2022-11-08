@@ -21,9 +21,9 @@ from headlight.utils import colorize_sql
 MIGRATION_TEMPLATE = """
 from headlight import Blueprint, types
 
-date = "{date}"
 author = "{author}"
 transactional = True
+date = "{date}"
 
 
 def migrate(schema: Blueprint) -> None:
