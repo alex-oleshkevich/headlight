@@ -67,6 +67,6 @@ jobs:
 
             -   name: Test with pytest
                 env:
-                    POSTGRES_URL: postgresql://postgres:postgres@postgres
+                    POSTGRES_URL: postgresql://postgres:postgres@localhost
                 run: |
                     pytest --no-cov-on-fail --cov headlight/ --cov tests/
