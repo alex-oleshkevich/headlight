@@ -28,6 +28,7 @@ jobs:
 
     unit_tests:
         runs-on: ubuntu-latest
+        container: ubuntu
         strategy:
             fail-fast: false
             matrix:
