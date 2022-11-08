@@ -28,7 +28,6 @@ jobs:
 
     unit_tests:
         runs-on: ubuntu-latest
-        container: ubuntu
         strategy:
             fail-fast: false
             matrix:
@@ -68,6 +67,6 @@ jobs:
 
             -   name: Test with pytest
                 env:
-                    POSTGRES_URL: postgresql://postgres:postgres@localhost
+                    POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1
                 run: |
                     pytest --no-cov-on-fail --cov headlight/ --cov tests/
