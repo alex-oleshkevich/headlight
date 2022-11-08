@@ -34,6 +34,7 @@ pytest-cov = "^3.0"
 black = "^22.10.0"
 mypy = "^0.990"
 flake8 = "^5.0.4"
+psycopg2-binary = "^2.9.3"
 
 [tool.poetry.extras]
 postgresql = ["psycopg2-binary"]
