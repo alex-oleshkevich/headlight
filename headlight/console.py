@@ -52,7 +52,7 @@ class LoggingHooks(MigrateHooks):
 
 
 @contextlib.contextmanager
-def catch_errors(verbose: bool) -> typing.Iterable[None]:
+def catch_errors(verbose: bool) -> typing.Iterator[None]:
     try:
         yield
     except MigrationError as ex:

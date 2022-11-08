@@ -74,7 +74,7 @@ class CreateTableBuilder:
 
     def add_index(
         self,
-        columns: list[str],
+        columns: list[str | IndexExpr],
         name: str | None = None,
         unique: bool = False,
         using: str | None = None,
@@ -115,7 +115,7 @@ class CreateTableBuilder:
 
     def add_primary_key(self, columns: list[str], name: str | None = None, include: list[str] | None = None) -> None:
         name = name or PrimaryKeyConstraint.generate_name(self._table.name, columns)
-        self._table.constraints.append(PrimaryKeyConstraint(name=name, columns=columns, include=include))
+        self._table.constraints.append(PrimaryKeyConstraint(name=name, columns=columns, include=include or []))
 
     def add_foreign_key(
         self,
@@ -220,8 +220,8 @@ class ChangeColumn:
             ops.ChangeTypeOp(
                 table_name=self._table_name,
                 column_name=self._column_name,
-                new_type=new_type,
-                current_type=current_type,
+                new_type=typing.cast(types.Type, new_type),
+                current_type=typing.cast(types.Type, current_type),
                 only=self._only,
                 if_table_exists=self._if_table_exists,
                 collation=collation,
@@ -245,7 +245,7 @@ class AlterTableBuilder:
         name: str,
         type: types.Type | typing.Type[types.Type],
         null: bool = False,
-        primary_key: bool | None = None,
+        primary_key: bool = False,
         default: str | Default | Expr | bool | list | dict | None = None,
         unique: bool | UniqueConstraint | None = None,
         checks: list[CheckConstraint | str | tuple[str, str]] | None = None,
@@ -328,7 +328,7 @@ class AlterTableBuilder:
     def add_primary_key(self, name: str, columns: list[str], include: list[str] | None = None) -> None:
         self.ops.append(
             ops.AddTableConstraintOp(
-                constraint=PrimaryKeyConstraint(name=name, columns=columns, include=include),
+                constraint=PrimaryKeyConstraint(name=name, columns=columns, include=include or []),
                 table_name=self._table_name,
                 only=self._only,
                 if_table_exists=self._if_exists,
@@ -404,7 +404,7 @@ class Blueprint:
         table_name: str,
         if_exists: bool = False,
         only: bool = False,
-    ) -> typing.ContextManager[AlterTableBuilder]:  # type: ignore[misc]
+    ) -> typing.Generator[AlterTableBuilder, None, None]:
         builder = AlterTableBuilder(table_name=table_name, if_exists=if_exists, only=only)
         yield builder
         self._ops.extend(builder.ops)

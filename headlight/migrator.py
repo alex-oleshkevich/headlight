@@ -6,7 +6,6 @@ import datetime
 import getpass
 import glob
 import importlib
-import io
 import os
 import sys
 import time
@@ -150,7 +149,7 @@ class Migrator:
         upgrade: bool = True,
         print_sql: bool = False,
         hooks: MigrateHooks | None = None,
-        writer: io.StringIO = sys.stderr,
+        writer: typing.TextIO = sys.stderr,
     ) -> None:
         tx = self.db.transaction() if migration.transactional else DummyTransaction(self.db)
         start_time = time.time()
